@@ -1,9 +1,4 @@
-"""
-list_models.py - show every free model OpenRouter currently offers,
-grouped by family, so we can pick five from five different families.
-
-Run:  python list_models.py
-"""
+"""list_models.py - show every free model OpenRouter currently offers, grouped by family, so we can pick five from five different families."""
 
 import requests
 
@@ -13,7 +8,7 @@ MODELS_URL = "https://openrouter.ai/api/v1/models"
 def fetch_free_models():
     """Ask OpenRouter for its catalogue and keep only the free models."""
     response = requests.get(MODELS_URL, timeout=30)
-    response.raise_for_status()          # blow up loudly if the request failed
+    response.raise_for_status()
 
     all_models = response.json()["data"]
 
@@ -26,18 +21,13 @@ def fetch_free_models():
 
 
 def group_by_family(models):
-    """
-    Bucket models by the part of the id before the '/'.
-    'meta-llama/llama-3.3-70b-instruct:free' -> family 'meta-llama'
-    """
+    """Bucket models by the part of the id before the '/'."""
     families = {}
 
     for model in models:
         family = model["id"].split("/")[0]
         entry = (model["id"], model.get("context_length", 0))
 
-        # setdefault: if this family isn't in the dict yet, start it with
-        # an empty list, then append to whatever list is there.
         families.setdefault(family, []).append(entry)
 
     return families

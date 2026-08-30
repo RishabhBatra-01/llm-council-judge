@@ -1,8 +1,6 @@
 """
-council.py - the LLM Council.
-
-Phase 2: three generators answer independently, two judges score them.
-Aggregation, gates, citations and audit come later.
+The LLM Council. Generators answer independently, judges score them,
+decide() runs the whole pipeline.
 
 Run:  python council.py "your question here"
 """
@@ -26,9 +24,6 @@ from decision import build_decision, refused_decision
 import citations as citations_module
 import audit
 
-# The pre-gate is a hard requirement, so its absence is reported loudly rather
-# than silently skipped. A system that quietly runs without its safety gate is
-# worse than one that refuses to start - it looks identical to one that has it.
 try:
     import gates
     GATES_AVAILABLE = True
@@ -42,18 +37,10 @@ SCHEMA_PATH = Path("schema/decision.schema.json")
 
 
 def validate_decision(decision):
-    """
-    Check our own output against our own contract before emitting it.
-
-    A schema we ship but never run against ourselves is documentation, not a
-    guarantee. Returns a list of problems; empty means valid.
-    """
+    """Check our own output against our own contract before emitting it."""
     try:
         import jsonschema
     except ImportError:
-        # "We could not check" is not "we checked and it failed". Conflating
-        # them would be the same error this whole system exists to avoid, so
-        # it is reported separately and does not fail the run.
         return None
 
     schema = json.loads(SCHEMA_PATH.read_text())
@@ -61,26 +48,11 @@ def validate_decision(decision):
     return [f"{'.'.join(str(p) for p in e.path) or '<root>'}: {e.message}"
             for e in validator.iter_errors(decision)]
 
-# ABSTAIN_MARKER, CONTAMINATION_PHRASES, MAX_JUSTIFICATION_CHARS and both
-# system prompts now come from config.yaml via config.py - see the imports.
-# The prompts are config because they change decisions: editing one changes
-# config_hash, which is correct, since runs under different prompts are not
-# comparable.
 
-
-# ===========================================================================
-# GENERATORS
-# ===========================================================================
-
+# Note there is no parameter for other candidates' answers: generator
+# independence is enforced by this signature, not by remembering it.
 def ask_generator(generator, question):
-    """
-    Ask ONE generator the ORIGINAL question.
-
-    Note what this function cannot do: there is no parameter for other
-    candidates' answers, so no caller can leak one generator's output into
-    another's input. The independence rule is enforced by the shape of this
-    function, not by remembering to obey it.
-    """
+    """Ask ONE generator the ORIGINAL question."""
     reply = call_model(
         generator["model_id"],
         question,
@@ -101,10 +73,9 @@ def ask_generator(generator, question):
         "served_by": reply["served_by"],
         "answer": reply["text"],
         "abstained": False,
-        "label": None,          # set by label_candidates(); survives save/load
+        "label": None,
     }
 
-    # A generator saying "I don't know" succeeded. That is a signal, not a failure.
     if candidate["ok"] and candidate["answer"].startswith(ABSTAIN_MARKER):
         candidate["abstained"] = True
 
@@ -126,21 +97,8 @@ def gather_candidates(question):
     return candidates
 
 
-# ===========================================================================
-# ANONYMISATION
-# ===========================================================================
-
 def label_candidates(candidates):
-    """
-    Give every usable answer a neutral label: A, B, C.
-
-    Judges see labels and text only. They never learn which model wrote what,
-    so they cannot favour a sibling's style or a name they find impressive.
-    The mapping stays here, in our code.
-
-    The label is stored ON the candidate, not in a side table keyed by object
-    identity - identity does not survive being written to disk and read back.
-    """
+    """Give every usable answer a neutral label: A, B, C."""
     labelled = {}
     usable = [c for c in candidates if c["ok"] and not c["abstained"]]
 
@@ -152,29 +110,19 @@ def label_candidates(candidates):
     return labelled
 
 
-# ===========================================================================
-# JSON REPAIR  (trap #6)
-# ===========================================================================
-
 FENCE_PATTERN = re.compile(r"```(?:json)?\s*(.*?)\s*```", re.DOTALL)
 
 
 def extract_json_object(text):
-    """
-    Get a dict out of model output, trying increasingly desperate methods.
-
-    Returns (dict, method_used) or (None, reason_it_failed).
-    """
+    """Get a dict out of model output, trying increasingly desperate methods."""
     if not text:
         return None, "empty text"
 
-    # 1. It is already clean JSON.
     try:
         return json.loads(text), "direct"
     except ValueError:
         pass
 
-    # 2. It is wrapped in a ```json fence.
     fenced = FENCE_PATTERN.search(text)
     if fenced:
         try:
@@ -182,7 +130,6 @@ def extract_json_object(text):
         except ValueError:
             pass
 
-    # 3. There is prose around it. Take the outermost braces.
     start = text.find("{")
     end = text.rfind("}")
     if start != -1 and end > start:
@@ -193,10 +140,6 @@ def extract_json_object(text):
 
     return None, "no parseable JSON object found"
 
-
-# ===========================================================================
-# JUDGES
-# ===========================================================================
 
 def build_judge_prompt(question, labelled):
     """Question + anonymised answers + rubric. No weights, no model names."""
@@ -245,20 +188,12 @@ Return exactly this JSON shape and nothing else:
 
 
 def sanitise_judgement(raw, labels):
-    """
-    Keep only what a judge is allowed to say, and report anything it smuggled in.
-
-    Returns (clean_dict_or_None, problems_list).
-    A missing score is NOT filled in with a default - inventing a score to
-    paper over a gap is exactly the kind of quiet lie this project exists
-    to avoid. A judge with holes in its scorecard has failed.
-    """
+    """Keep only what a judge is allowed to say, and report anything it smuggled in."""
     problems = []
 
     if not isinstance(raw, dict):
         return None, ["judge output was not a JSON object"]
 
-    # --- key allowlist: a judge has nowhere to put a smuggled answer --------
     extra_keys = set(raw) - {"scores", "justification"}
     if extra_keys:
         problems.append(f"dropped unexpected keys: {sorted(extra_keys)}")
@@ -276,6 +211,7 @@ def sanitise_judgement(raw, labels):
         clean_entry = {}
         for criterion in RUBRIC:
             value = entry.get(criterion)
+            # Reject the whole scorecard rather than invent a missing score.
             if not isinstance(value, (int, float)) or isinstance(value, bool):
                 return None, problems + [
                     f"{label}.{criterion} is not a number: {value!r}"]
@@ -286,7 +222,6 @@ def sanitise_judgement(raw, labels):
 
         clean_scores[label] = clean_entry
 
-    # --- justifications: truncated, and checked for smuggled answers -------
     raw_justifications = raw.get("justification") or {}
     clean_justifications = {}
 
@@ -314,13 +249,7 @@ def sanitise_judgement(raw, labels):
 
 
 def ask_judge(judge, question, labelled):
-    """
-    Ask ONE judge to score the anonymised answers.
-
-    On unparseable JSON we retry once with a blunter instruction, then give up.
-    Giving up cleanly is a feature: a judge we could not read is a judge that
-    failed, and confidence must fall accordingly.
-    """
+    """Ask ONE judge to score the anonymised answers."""
     prompt = build_judge_prompt(question, labelled)
     labels = sorted(labelled)
 
@@ -340,7 +269,7 @@ def ask_judge(judge, question, labelled):
         "repair_calls": 0,
     }
 
-    for repair in range(2):          # first go, then one repair attempt
+    for repair in range(2):
         suffix = "" if repair == 0 else (
             "\n\nYour previous reply was not valid JSON. "
             "Return ONLY the JSON object. No prose, no fences.")
@@ -360,7 +289,7 @@ def ask_judge(judge, question, labelled):
 
         if not reply["ok"]:
             result["detail"] = reply["detail"]
-            return result            # a network/content failure is not repairable
+            return result
 
         parsed, method = extract_json_object(reply["text"])
         if parsed is None:
@@ -402,10 +331,6 @@ def gather_judgements(question, labelled):
 
     return judgements
 
-
-# ===========================================================================
-# REPORTING  (a real Decision Object replaces this in Phase 4)
-# ===========================================================================
 
 def print_report(question, candidates, labelled, judgements):
     print("=" * 74)
@@ -535,14 +460,7 @@ def run_council(question):
 
 
 def save_run(run, name):
-    """
-    Freeze a run to samples/<name>.json.
-
-    Why bother: the free tier allows ~200 calls/day and one run costs 5. Tuning
-    the confidence formula takes dozens of iterations - far more than a day's
-    quota. Saved runs let us build the aggregator offline, for free, instantly,
-    against the exact same inputs every time (which also helps with trap #9).
-    """
+    """Freeze a run to samples/<name>.json."""
     SAMPLES_DIR.mkdir(exist_ok=True)
     path = SAMPLES_DIR / f"{name}.json"
     path.write_text(json.dumps(run, indent=2, ensure_ascii=False))
@@ -559,23 +477,12 @@ def load_run(name):
 
     run = json.loads(path.read_text())
 
-    # Rebuild the label -> candidate map from labels stored on the candidates.
     labelled = {c["label"]: c for c in run["candidates"] if c.get("label")}
     return run, labelled
 
 
 def decide(question, run=None, write_audit=True, save_as=None):
-    """
-    The whole pipeline, start to finish. One question in, one Decision Object out.
-
-    pre-gate -> generators -> judges -> aggregate -> citations -> post-gate
-             -> Decision Object -> audit chain
-
-    Pass `run` to replay a frozen sample instead of calling models.
-    This is the single entry point; the CLI and the eval harness both use it,
-    so neither can drift into a different pipeline than the other.
-    """
-    # --- pre-gate: before any model is called --------------------------------
+    """The whole pipeline, start to finish. One question in, one Decision Object out."""
     if run is None:
         if not GATES_AVAILABLE:
             print("WARNING: gates.py not found - the pre-gate is NOT running. "
@@ -587,7 +494,6 @@ def decide(question, run=None, write_audit=True, save_as=None):
                                             config_snapshot())
                 if write_audit:
                     decision["audit_ref"] = audit.append(decision)
-                # No council ran, so there is no run and no aggregation.
                 return decision, None, None, None
 
         run = run_council(question)
@@ -596,12 +502,10 @@ def decide(question, run=None, write_audit=True, save_as=None):
 
     labelled = label_candidates(run["candidates"])
 
-    # --- citations: our code opens the URLs, not a judge ---------------------
     checked = citations_module.verify_all(run["candidates"])
 
     aggregation = aggregate(run, citations=checked)
 
-    # --- post-gate: a safe question can still draw an unsafe answer ----------
     if GATES_AVAILABLE and aggregation.get("winning_answer"):
         safe, rule, reason = gates.post_gate(aggregation["winning_answer"])
         if not safe:
@@ -628,8 +532,6 @@ def decide(question, run=None, write_audit=True, save_as=None):
     decision = build_decision(run["question"], run, aggregation,
                               config_snapshot(), citations=checked)
 
-    # Log BEFORE emitting. A decision that reached the user but not the log
-    # would be a decision we cannot audit - which is a decision we do not ship.
     if write_audit:
         decision["audit_ref"] = audit.append(decision)
 
@@ -671,7 +573,6 @@ def main():
     if args.json:
         print(json.dumps(decision, indent=2, ensure_ascii=False))
     elif aggregation is None:
-        # Refused at the pre-gate: no council ran, so there is no report.
         print("=" * 74)
         print(f"QUESTION: {question}")
         print("=" * 74)

@@ -1,13 +1,7 @@
 """
-audit.py - the append-only, tamper-evident decision log.
+Append-only, tamper-evident decision log.
 
-Every decision (including refusals and no_decisions) gets one line in
-audit/chain.jsonl. Each line carries the hash of the line before it, so any
-edit or deletion anywhere in the history breaks every link after it.
-
-Run:  python audit.py verify     check the chain
-      python audit.py show       list the entries
-      python audit.py demo       tamper with a copy and watch verify catch it
+Run:  python audit.py verify | show | demo
 """
 
 import argparse
@@ -20,19 +14,11 @@ from pathlib import Path
 
 CHAIN_PATH = Path("audit/chain.jsonl")
 
-# The first record links to this. A fixed, obviously-not-a-real-hash value, so
-# "start of chain" can never be confused with a genuine previous entry.
 GENESIS = "sha256:" + "0" * 64
 
 
 def _canonical(obj):
-    """
-    Bytes that depend only on CONTENT, never on formatting.
-
-    Sorted keys and no incidental whitespace. Without this, re-serialising the
-    same decision with different key order would produce a different hash and
-    the chain would appear broken when nothing had changed.
-    """
+    """Bytes that depend only on CONTENT, never on formatting."""
     return json.dumps(obj, sort_keys=True, separators=(",", ":"),
                       ensure_ascii=False).encode("utf-8")
 
@@ -53,16 +39,10 @@ def _read_records(path=CHAIN_PATH):
 
 
 def append(decision, path=CHAIN_PATH):
-    """
-    Add one decision to the chain. Returns the entry hash (its audit_ref).
-
-    Note what is hashed: the decision WITHOUT its audit_ref field. The ref is
-    the hash of the entry, so including it would require the hash to contain
-    itself. The field is derived, not content - so it is stripped before
-    hashing and stamped onto the caller's copy afterwards.
-    """
+    """Add one decision to the chain. Returns the entry hash (its audit_ref)."""
     path.parent.mkdir(parents=True, exist_ok=True)
 
+    # Hash the decision WITHOUT audit_ref - the ref is this hash.
     payload = {k: v for k, v in decision.items() if k != "audit_ref"}
     payload_hash = _sha256(_canonical(payload))
 
@@ -79,7 +59,6 @@ def append(decision, path=CHAIN_PATH):
 
     record = dict(header, entry_hash=entry_hash, decision=payload)
 
-    # Append only. We open in append mode and never rewrite earlier lines.
     with path.open("a", encoding="utf-8") as handle:
         handle.write(json.dumps(record, ensure_ascii=False) + "\n")
 
@@ -87,19 +66,7 @@ def append(decision, path=CHAIN_PATH):
 
 
 def verify(path=CHAIN_PATH):
-    """
-    Walk the chain and report the first place it stops adding up.
-
-    Four things are checked per record, and they catch different tampering:
-      - sequence numbers are contiguous     -> a deleted line
-      - prev_hash matches the previous entry -> a removed or reordered line
-      - payload_hash matches the stored decision -> an edited decision
-      - entry_hash matches its own header    -> an edited hash
-
-    Editing a decision and recomputing its payload_hash still breaks the
-    entry_hash. Recomputing that too still breaks the NEXT record's prev_hash.
-    There is nowhere to stop.
-    """
+    """Walk the chain and report the first place it stops adding up."""
     records = _read_records(path)
     problems = []
     prev_hash = GENESIS
@@ -131,7 +98,6 @@ def verify(path=CHAIN_PATH):
             problems.append(f"{where}: entry_hash does not match its own header.")
 
         if problems:
-            # Everything after a break is untrustworthy anyway. Stop and say so.
             problems.append(f"entries {index}-{len(records) - 1} can no longer "
                             "be trusted.")
             return records, problems
@@ -140,10 +106,6 @@ def verify(path=CHAIN_PATH):
 
     return records, problems
 
-
-# ===========================================================================
-# CLI
-# ===========================================================================
 
 def cmd_verify(path):
     records, problems = verify(path)
@@ -176,13 +138,7 @@ def cmd_show(path):
 
 
 def cmd_demo(path):
-    """
-    Prove the chain actually chains.
-
-    Copies the real log, edits one old decision, and runs the same verify()
-    over the copy. A hash chain nobody has watched catch tampering is a claim,
-    not a guarantee.
-    """
+    """Prove the chain actually chains."""
     records = _read_records(path)
     if len(records) < 2:
         print("need at least 2 entries to demonstrate - run the council a few "

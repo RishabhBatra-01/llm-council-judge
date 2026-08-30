@@ -1,24 +1,6 @@
 """
-citations.py - check the sources a generator cited.
-
-What this does: pulls URLs out of answer text, opens each one, and reports
-whether it resolved and whether the claim's wording plausibly appears on the
-page.
-
-What this does NOT do, and will not be extended to do without a human in the
-loop: decide whether the source actually SUPPORTS the claim. See README §7.
-A live URL proves a page exists. It does not prove the page says what the
-model said it says.
-
-Three statuses, and the distinction between the last two matters:
-
-  verified    reachable AND enough of the claim's wording appears on the page
-  unverified  reachable, but the claim could not be located there
-  failed      unreachable: 404, timeout, DNS failure, connection refused
-
-`unverified` is not a soft `failed`. It means "we looked and could not tell",
-which is a different fact about the world from "this source does not exist",
-and the Decision Object keeps them apart.
+Check the sources a generator cited: is the URL reachable, and does the
+claim's wording appear there. Reachability is not truth - see README section 7.
 """
 
 import re
@@ -28,11 +10,8 @@ import requests
 from config import (CITATION_MAX_PER_RUN, CITATION_TIMEOUT,
                     CITATION_USER_AGENT, CLAIM_OVERLAP_THRESHOLD)
 
-# Deliberately permissive about surrounding punctuation: models wrap URLs in
-# brackets, parentheses, angle brackets and CJK brackets more or less at random.
 URL_PATTERN = re.compile(r"https?://[^\s<>\"'\]\)】」]+")
 
-# Trailing punctuation that belongs to the sentence, not the URL.
 TRAILING_JUNK = ".,;:!?'\"»)]}】"
 
 STOPWORDS = {
@@ -49,16 +28,7 @@ def _clean_url(raw):
 
 
 def _sentence_around(text, url):
-    """
-    The sentence containing the URL, used as the claim being sourced.
-
-    A heuristic, and a shaky one: models do not reliably put a claim and its
-    citation in the same sentence. It is the best available approximation
-    without asking generators for structured JSON, which we avoid on purpose
-    (every model forced into JSON is another parse failure waiting to happen).
-    Its weakness is why a citation we cannot confirm becomes `unverified`
-    rather than `failed`.
-    """
+    """The sentence containing the URL, used as the claim being sourced."""
     position = text.find(url)
     if position == -1:
         return text[:300].strip()
@@ -75,7 +45,6 @@ def _sentence_around(text, url):
             end = min(end, found + 1)
 
     claim = text[start:end].strip()
-    # Strip the URL and any bracket it was wearing out of the claim itself.
     claim = claim.replace(url, "").strip(" ()[]【】<>「」,;:")
     return re.sub(r"\s+", " ", claim)[:300]
 
@@ -86,13 +55,7 @@ def _content_words(text):
 
 
 def extract(candidates):
-    """
-    Find every cited URL across the usable answers.
-
-    Returns a list of {label, claim, source} - unchecked. Deduplicated by
-    (label, url) so a model citing the same source three times does not get
-    three chances to raise its own verification_pass_rate.
-    """
+    """Find every cited URL across the usable answers."""
     found = []
     seen = set()
 
@@ -117,20 +80,14 @@ def extract(candidates):
 
 
 def check_one(citation):
-    """
-    Open one URL and decide what we can honestly say about it.
-
-    Never raises. A dead link is data.
-    """
+    """Open one URL and decide what we can honestly say about it."""
     url = citation["source"]
     headers = {"User-Agent": CITATION_USER_AGENT}
 
     result = dict(citation, status="failed", http_status=None, detail="")
 
     try:
-        # HEAD first: cheap, and enough to settle reachability. Some servers
-        # reject HEAD outright, so fall through to GET rather than calling a
-        # working page dead because of a method restriction.
+        # HEAD is enough for reachability; some servers reject it, so fall back.
         response = requests.head(url, timeout=CITATION_TIMEOUT,
                                  allow_redirects=True, headers=headers)
         if response.status_code >= 400 or not response.content:
@@ -146,7 +103,6 @@ def check_one(citation):
         result["detail"] = f"HTTP {response.status_code}"
         return result
 
-    # Reachable. Now the weaker question: does the claim's wording appear?
     content_type = response.headers.get("Content-Type", "")
     if "html" not in content_type and "text" not in content_type:
         result["status"] = "unverified"

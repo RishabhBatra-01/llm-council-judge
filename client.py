@@ -1,8 +1,5 @@
 """
-client.py - the only place in this project that talks to the network.
-
-Everything else calls call_model() and gets back a dict. It never raises:
-a dead model is data, not a crash.
+The only module that talks to the OpenRouter API. Never raises: a dead model is data.
 """
 
 import os
@@ -13,7 +10,7 @@ import requests
 from dotenv import load_dotenv
 
 load_dotenv()
-API_KEY = os.environ["OPENROUTER_API_KEY"]      # crash now if the key is missing
+API_KEY = os.environ["OPENROUTER_API_KEY"]
 
 CHAT_URL = "https://openrouter.ai/api/v1/chat/completions"
 
@@ -21,9 +18,6 @@ DEFAULT_MAX_TOKENS = 1500
 TEMPERATURE = 0
 TIMEOUT_SECONDS = 60
 
-# How we react to each HTTP status. Retrying a 403 forever burns quota on
-# something that can never succeed; not retrying a 429 throws away a model
-# that was fine.
 RETRYABLE = {429, 500, 502, 503, 504}
 FATAL = {400, 401, 403, 404}
 
@@ -44,16 +38,11 @@ def retry_after_seconds(response):
     try:
         return min(float(header), 30.0)
     except ValueError:
-        return None                      # it may be an HTTP date; ignore
+        return None
 
 
 def read_reply(response, elapsed_ms, attempts):
-    """
-    Read a 200 reply and decide whether it is actually USABLE.
-
-    HTTP 200 only means the network call worked. A model can still return an
-    empty string, or stop mid-sentence having run out of tokens.
-    """
+    """Read a 200 reply and decide whether it is actually USABLE."""
     try:
         data = response.json()
         choice = data["choices"][0]
@@ -80,7 +69,7 @@ def read_reply(response, elapsed_ms, attempts):
         "attempts": attempts,
         "finish_reason": finish_reason,
         "tokens": usage.get("total_tokens", 0),
-        "reasoning_tokens": details.get("reasoning_tokens"),  # None = not reported
+        "reasoning_tokens": details.get("reasoning_tokens"),
         "served_by": data.get("model", "?"),
         "cost_usd": usage.get("cost", 0.0),
     }
@@ -106,11 +95,7 @@ def failure(stage, detail, elapsed_ms=0, attempts=0):
 
 
 def call_model(model_id, prompt, system_prompt=None, max_tokens=DEFAULT_MAX_TOKENS):
-    """
-    Send one prompt to one model, retrying only when retrying can help.
-
-    Always returns a dict with the same keys, ok or not.
-    """
+    """Send one prompt to one model, retrying only when retrying can help."""
     messages = []
     if system_prompt:
         messages.append({"role": "system", "content": system_prompt})
@@ -155,21 +140,7 @@ def call_model(model_id, prompt, system_prompt=None, max_tokens=DEFAULT_MAX_TOKE
             return failure("http", f"HTTP {status} (fatal): {body[:120]}",
                            elapsed_ms, attempt)
 
-        # Not every 429 means the same thing, and the status code alone cannot
-        # tell them apart:
-        #
-        #   "temporarily rate-limited upstream"  -> the provider pool is busy.
-        #                                           Waiting 2s genuinely helps.
-        #   "free-models-per-day" / daily cap    -> the account's daily quota is
-        #                                           spent. No amount of backoff
-        #                                           helps until it resets, and
-        #                                           every retry is a wasted call
-        #                                           on a request that cannot
-        #                                           succeed.
-        #
-        # We only learn which by reading the body. Treating a daily cap as
-        # retryable turns one dead call into three and adds ~14s of pointless
-        # sleeping per model.
+        # A daily-cap 429 cannot be waited out. Retrying just burns calls.
         if status == 429 and ("free-models-per-day" in body
                               or "free_tier_daily" in body
                               or "per-day" in body):

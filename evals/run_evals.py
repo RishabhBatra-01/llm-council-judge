@@ -1,17 +1,7 @@
 """
-run_evals.py - run the eval set and save a report.
+Run the eval set and save a report.
 
-Run from the repo root:
-
-    python evals/run_evals.py              # live, ~20 API calls
-    python evals/run_evals.py --offline    # replay samples/, 0 API calls
-
-Costs roughly 20 calls, not 25: the unsafe question is refused at the pre-gate
-before any model is contacted.
-
-What this measures is NOT "did the council get the right answer". For three of
-the five questions the correct behaviour is declining. It measures whether the
-system knows when it should not answer.
+Run from the repo root:  python evals/run_evals.py [--offline]
 """
 
 import argparse
@@ -20,20 +10,17 @@ import json
 import sys
 from pathlib import Path
 
-# Run from anywhere: put the repo root on the import path.
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 
-import yaml                                                   # noqa: E402
+import yaml
 
-from council import decide, load_run                          # noqa: E402
+import gates
+from council import decide, load_run
 
 QUESTIONS_PATH = Path(__file__).with_name("questions.yaml")
 REPORT_PATH = Path(__file__).with_name("report.json")
 
-# Offline replay uses these frozen runs where one exists. Questions without a
-# sample are skipped in offline mode rather than quietly run live - a report
-# labelled "offline" that made network calls would be a lie about its own cost.
 OFFLINE_SAMPLES = {
     "factual": "easy",
     "ambiguous": "contested",
@@ -47,14 +34,7 @@ def load_questions():
 
 
 def check_expectation(case, decision):
-    """
-    Did the system behave acceptably? Returns (matched, why_not).
-
-    `expect` may be a single status or a list of acceptable ones. `require_risk`
-    additionally demands a risk of that type - used where the brief allows more
-    than one correct outcome but only if the reason is surfaced. On the
-    ambiguous case, deciding is fine; deciding SILENTLY is not.
-    """
+    """Did the system behave acceptably? Returns (matched, why_not)."""
     expected = case["expect"]
     acceptable = expected if isinstance(expected, list) else [expected]
 
@@ -68,9 +48,6 @@ def check_expectation(case, decision):
             return False, (f"status ok, but no '{required}' risk was recorded "
                            f"(got {sorted(types) or 'none'})")
 
-    # Guards against passing for the wrong reason. A no_decision produced by
-    # three rate-limited generators looks identical to one produced by three
-    # generators correctly declining to guess - unless we check WHY.
     needed = case.get("require_abstentions")
     if needed:
         abstained = sum(1 for g in decision["provenance"]["generators"]
@@ -144,12 +121,15 @@ def main():
         run = None
         if args.offline:
             sample = OFFLINE_SAMPLES.get(case["id"])
-            if not sample:
+            if sample:
+                run, _ = load_run(sample)
+                question = run["question"]
+            elif not gates.pre_gate(question)[0]:
+                pass
+            else:
                 print(f"    skipped - no frozen sample for '{case['id']}'; "
                       "running it would make live calls", file=sys.stderr)
                 continue
-            run, _ = load_run(sample)
-            question = run["question"]
 
         decision, _, _, _ = decide(question, run=run,
                                    write_audit=not args.no_audit)
@@ -167,11 +147,6 @@ def main():
 
     matched = sum(1 for row in rows if row["match"])
 
-    # A run where generators could not be reached measures the PROVIDER, not
-    # the council. Saying so on the report itself matters: a reader seeing
-    # "2/5" with no context would conclude the system is broken, when in fact
-    # every case still produced a well-formed Decision Object and declined
-    # rather than inventing an answer.
     starved = [row["id"] for row in rows
                if row["generators_failed"] and not row["generators_usable"]
                and row["actual"] != "refused"]
@@ -190,9 +165,6 @@ def main():
         "cases_run": len(rows),
         "cases_expected": len(cases),
         "matched_expectation": matched,
-        # Deliberately not called a pass rate. A mismatch is a prompt to read
-        # the Decision Object and decide whether the system or the expectation
-        # was wrong - not automatically a failure.
         "total_cost_usd": round(sum(r["cost_usd"] for r in rows), 6),
         "total_latency_ms": sum(r["latency_ms"] for r in rows),
         "results": rows,
@@ -222,9 +194,6 @@ def main():
               "Re-run when the rate limit clears.")
     print(f"  report -> {REPORT_PATH}")
 
-    # Exit 0 either way. A mismatch is information, not a build failure - and
-    # a harness that exits non-zero invites someone to "fix" it by editing the
-    # expectation until it passes.
     return 0
 
 

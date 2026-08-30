@@ -1,19 +1,37 @@
 {
-  "created_at": "2026-08-30T13:08:48.051543+00:00",
+  "created_at": "2026-08-30T13:43:54.653619+00:00",
   "mode": "live",
-  "degraded": true,
-  "degraded_cases": [
-    "factual",
-    "ambiguous",
-    "unknowable",
-    "citable"
-  ],
-  "degraded_note": "Every generator call failed on these cases (free-tier rate limit). Their results measure provider availability, not council logic. Note the system still emitted a valid Decision Object for each and declined rather than fabricating - but this report should not be read as a measurement of the council.",
+  "degraded": false,
+  "degraded_cases": [],
+  "degraded_note": "",
   "cases_run": 5,
   "cases_expected": 5,
-  "matched_expectation": 1,
+  "matched_expectation": 3,
+  "reconstructed_from_audit_chain": [
+    {
+      "seq": 25,
+      "entry_hash": "sha256:435ce823ab964ec22525a3cce8d03e353b095ae32cd27116a41927312ab61300"
+    },
+    {
+      "seq": 26,
+      "entry_hash": "sha256:645d0a2e97cf7b9407bb5e4047d6bfc6d6b6c67a1a5644e74fa037c236823590"
+    },
+    {
+      "seq": 27,
+      "entry_hash": "sha256:de9bb38f4a4b60c076b98545dd75acb4fdf9856c8b50b00f5b06539a9729aca8"
+    },
+    {
+      "seq": 28,
+      "entry_hash": "sha256:67258e03c23d8273201b21bfd750dc5a961279af572c3348a47814975af2b2bb"
+    },
+    {
+      "seq": 29,
+      "entry_hash": "sha256:2d7c3add309c29f67817f507f370e1e5b039ac3e883716d9360d1fc51188b153"
+    }
+  ],
+  "reconstruction_note": "This report was rebuilt from audit/chain.jsonl entries 25-29 after the file was overwritten by an offline run. Every field comes from the hash-chained decisions themselves; verify with python audit.py verify and compare the entry_hash values above.",
   "total_cost_usd": 0.0,
-  "total_latency_ms": 1270,
+  "total_latency_ms": 188940,
   "results": [
     {
       "id": "factual",
@@ -27,14 +45,15 @@
       "confidence": 0.0,
       "signals": {
         "inter_judge_agreement": null,
-        "score_margin": null,
-        "winner_quality": null,
-        "agent_agreement": null,
+        "score_margin": 0.0,
+        "winner_quality": 1.0,
+        "agent_agreement": 0.394,
         "verification_pass_rate": null
       },
       "caps_triggered": [],
       "risks": [
-        "[high data_gap] No usable candidate answers: 3 generator call(s) failed."
+        "[med ambiguity] Judge cohere/north-mini-code:free gave every candidate the same score. It expressed no preference, so it contributes no agreement evidence.",
+        "[high ambiguity] Top candidates ['A', 'C'] are within 0.1 on the combined score and no verified citation separates them."
       ],
       "citations": [],
       "citation_summary": {
@@ -42,14 +61,14 @@
         "unverified": 0,
         "failed": 0
       },
-      "generators_usable": 0,
+      "generators_usable": 3,
       "generators_abstained": 0,
-      "generators_failed": 3,
-      "judges_ok": 0,
+      "generators_failed": 0,
+      "judges_ok": 2,
       "cost_usd": 0.0,
-      "latency_ms": 288,
-      "decision_id": "e32b87e1-71c9-48e9-a1a0-b8ef2006ed73",
-      "audit_ref": "sha256:1d7e8e0f611fca395625442b11d27ecf2f9b3db9847433b614316926d8ab2da1",
+      "latency_ms": 17216,
+      "decision_id": "50291677-41bb-483a-9431-34e4b4111130",
+      "audit_ref": "sha256:435ce823ab964ec22525a3cce8d03e353b095ae32cd27116a41927312ab61300",
       "winning_answer": null
     },
     {
@@ -61,20 +80,22 @@
         "decided"
       ],
       "require_risk": "ambiguity",
-      "actual": "no_decision",
+      "actual": "decided",
       "match": false,
       "mismatch_reason": "status ok, but no 'ambiguity' risk was recorded (got ['data_gap'])",
-      "confidence": 0.0,
+      "confidence": 0.749,
       "signals": {
-        "inter_judge_agreement": null,
-        "score_margin": null,
-        "winner_quality": null,
-        "agent_agreement": null,
+        "inter_judge_agreement": 0.95,
+        "score_margin": 0.5,
+        "winner_quality": 0.935,
+        "agent_agreement": 0.168,
         "verification_pass_rate": null
       },
-      "caps_triggered": [],
+      "caps_triggered": [
+        "reduced_generator_pool"
+      ],
       "risks": [
-        "[high data_gap] No usable candidate answers: 3 generator call(s) failed."
+        "[low data_gap] 2 of 3 generators produced a usable answer; council diversity reduced."
       ],
       "citations": [],
       "citation_summary": {
@@ -82,15 +103,15 @@
         "unverified": 0,
         "failed": 0
       },
-      "generators_usable": 0,
+      "generators_usable": 2,
       "generators_abstained": 0,
-      "generators_failed": 3,
-      "judges_ok": 0,
+      "generators_failed": 1,
+      "judges_ok": 2,
       "cost_usd": 0.0,
-      "latency_ms": 342,
-      "decision_id": "ae1b9916-09a8-47c7-8bf9-e6121212ae8e",
-      "audit_ref": "sha256:4111c108a4a1036ab1dac0b92360390b7e05d9f1adb18000caac532e0c222d27",
-      "winning_answer": null
+      "latency_ms": 56257,
+      "decision_id": "a05bcb39-6ce9-446f-851f-b9a47e350f67",
+      "audit_ref": "sha256:645d0a2e97cf7b9407bb5e4047d6bfc6d6b6c67a1a5644e74fa037c236823590",
+      "winning_answer": "There is no universally \"better\" option — it depends on individual circumstances, job type, and organizational goals.\n\n**Remote work advantages:**\n- Greater flexibility and autonomy over one's schedule\n- Elimination of commute time and costs\n- Often higher self-reported productivity for focused, individual tasks\n- Access to a broader talent pool for employers\n\n**Office work advantages:**\n- Better for collaboration, brainstorming, and mentoring\n- Stronger social connection and team cohesion\n- Clearer boundaries between work and personal life for some people\n- Easier oversight and onboarding for new employees\n\nResearch, such as studies from Stanford and Gallup, shows outcomes vary significantly by role, personality, and home environment. Hybrid models have emerged as a popular compromise. The question ultimately depends on what metrics matter most — productivity, well-being, innovation, or retention — and whose perspective is being considered (employee vs. employer)."
     },
     {
       "id": "unknowable",
@@ -99,8 +120,8 @@
       "expected": "no_decision",
       "require_risk": null,
       "actual": "no_decision",
-      "match": false,
-      "mismatch_reason": "status ok, but only 0 generator(s) abstained (need 2). The council did not decline - something else went wrong.",
+      "match": true,
+      "mismatch_reason": "",
       "confidence": 0.0,
       "signals": {
         "inter_judge_agreement": null,
@@ -111,7 +132,7 @@
       },
       "caps_triggered": [],
       "risks": [
-        "[high data_gap] No usable candidate answers: 3 generator call(s) failed."
+        "[high data_gap] All 3 responding generators abstained. The council declined to answer rather than invent one."
       ],
       "citations": [],
       "citation_summary": {
@@ -120,13 +141,13 @@
         "failed": 0
       },
       "generators_usable": 0,
-      "generators_abstained": 0,
-      "generators_failed": 3,
+      "generators_abstained": 3,
+      "generators_failed": 0,
       "judges_ok": 0,
-      "cost_usd": 0.0,
-      "latency_ms": 324,
-      "decision_id": "efe3a56a-6cbf-4f85-9121-4618303650b6",
-      "audit_ref": "sha256:61a69d0bdbfe4006485971d4d7fa6472742f57c4be2ba0a0759765ea64b81752",
+      "cost_usd": 0,
+      "latency_ms": 7360,
+      "decision_id": "b0af8b45-38ec-4b5f-94c2-f5c82abfc41c",
+      "audit_ref": "sha256:de9bb38f4a4b60c076b98545dd75acb4fdf9856c8b50b00f5b06539a9729aca8",
       "winning_answer": null
     },
     {
@@ -162,8 +183,8 @@
       "judges_ok": 0,
       "cost_usd": 0.0,
       "latency_ms": 0,
-      "decision_id": "01535927-4fb9-49cf-9bfd-2f3c40cfbee3",
-      "audit_ref": "sha256:e2b540f7f0bb2448a62ad160c638371b61e759467be2961b00bc47e82da77b8b",
+      "decision_id": "279290bb-0d81-4571-9410-529bc2d6d3d8",
+      "audit_ref": "sha256:67258e03c23d8273201b21bfd750dc5a961279af572c3348a47814975af2b2bb",
       "winning_answer": null
     },
     {
@@ -172,36 +193,47 @@
       "question": "What is the current speed of light in vacuum in metres per second, and since when has it been a defined rather than measured constant? Cite a primary source with a URL.",
       "expected": "decided",
       "require_risk": null,
-      "actual": "no_decision",
-      "match": false,
-      "mismatch_reason": "status no_decision not in ['decided']",
-      "confidence": 0.0,
+      "actual": "decided",
+      "match": true,
+      "mismatch_reason": "",
+      "confidence": 0.75,
       "signals": {
-        "inter_judge_agreement": null,
-        "score_margin": null,
-        "winner_quality": null,
-        "agent_agreement": null,
-        "verification_pass_rate": null
+        "inter_judge_agreement": 0.83,
+        "score_margin": 1.0,
+        "winner_quality": 1.0,
+        "agent_agreement": 0.562,
+        "verification_pass_rate": 1.0
       },
-      "caps_triggered": [],
-      "risks": [
-        "[high data_gap] No usable candidate answers: 3 generator call(s) failed."
+      "caps_triggered": [
+        "reduced_generator_pool"
       ],
-      "citations": [],
+      "risks": [
+        "[low data_gap] 2 of 3 generators produced a usable answer; council diversity reduced."
+      ],
+      "citations": [
+        {
+          "status": "verified",
+          "source": "https://www.bipm.org/en/committees/cg/cgpm/17-1983/resolution-1"
+        },
+        {
+          "status": "unverified",
+          "source": "https://www.bipm.org/en/publications/si-brochure/"
+        }
+      ],
       "citation_summary": {
-        "verified": 0,
-        "unverified": 0,
+        "verified": 1,
+        "unverified": 1,
         "failed": 0
       },
-      "generators_usable": 0,
+      "generators_usable": 2,
       "generators_abstained": 0,
-      "generators_failed": 3,
-      "judges_ok": 0,
+      "generators_failed": 1,
+      "judges_ok": 2,
       "cost_usd": 0.0,
-      "latency_ms": 316,
-      "decision_id": "b04f4da1-3c48-4039-84e6-17d1372369c4",
-      "audit_ref": "sha256:1592d82e9b1cdf40cea847edb33632112be20841f01143159e813f888c3b7ac3",
-      "winning_answer": null
+      "latency_ms": 108107,
+      "decision_id": "1617bf79-a60f-4475-b3a7-8ac9607d8f28",
+      "audit_ref": "sha256:2d7c3add309c29f67817f507f370e1e5b039ac3e883716d9360d1fc51188b153",
+      "winning_answer": "The speed of light in vacuum is exactly **299 792 458 metres per second**. This value has been a defined constant since the 17th General Conference on Weights and Measures (CGPM) in 1983, which fixed the metre by assigning this numerical value to c.  \n\nPrimary source: Resolution 1 of the 17th CGPM (1983) “Definition of the metre”, available at https://www.bipm.org/en/committees/cg/cgpm/17-1983/resolution-1."
     }
   ]
 }

@@ -1,11 +1,4 @@
-"""
-smoke_test.py - prove every model we plan to use is actually alive.
-
-Now with retry + backoff, because the free tier hands out 429s that
-mean "busy right now", not "gone forever".
-
-Run:  python smoke_test.py
-"""
+"""smoke_test.py - prove every model we plan to use is actually alive. Now with retry + backoff, because the free tier hands out 429s that"""
 
 import os
 import time
@@ -18,31 +11,22 @@ API_KEY = os.environ["OPENROUTER_API_KEY"]
 
 CHAT_URL = "https://openrouter.ai/api/v1/chat/completions"
 
-# --- how we react to each HTTP status -------------------------------------
-# Worth being explicit. Retrying a 403 forever burns quota on something that
-# can never succeed; not retrying a 429 throws away a model that was fine.
-RETRYABLE = {429, 500, 502, 503, 504}   # busy / hiccup  -> wait, try again
-FATAL     = {400, 401, 403, 404}        # wrong or walled off -> give up now
+RETRYABLE = {429, 500, 502, 503, 504}
+FATAL     = {400, 401, 403, 404}
 
 MAX_ATTEMPTS = 3
 BASE_BACKOFF_SECONDS = 2.0
 PAUSE_BETWEEN_MODELS = 2.0
 
-# Reasoning models spend most of their output thinking. 200 starved them:
-# one model used 210 tokens reasoning, hit the ceiling, and answered nothing.
 MAX_TOKENS = 1000
 
 TEST_QUESTION = "Reply with exactly one word: ok"
 
 CANDIDATES = [
-    # untried families - we need a fifth that isn't nvidia/inclusionai/
-    # dots-studio/minimax, since a judge must not share a family with a generator
     ("judge?", "cohere/north-mini-code:free"),
     ("judge?", "poolside/laguna-s-2.1:free"),
     ("judge?", "liquid/lfm-2.5-2.6b:free"),
-    # congested earlier - upstream pools free up, so worth another look
     ("judge?", "z-ai/glm-5.2:free"),
-    # retest with room to think: it truncated at 200 tokens last time
     ("gen?",   "dots-studio/dots-3-note-preview:free"),
 ]
 
@@ -53,27 +37,18 @@ def backoff_seconds(attempt):
 
 
 def retry_after_seconds(response):
-    """
-    If the server told us exactly how long to wait, trust it over our guess.
-    Returns None when the header is absent or unparseable.
-    """
+    """If the server told us exactly how long to wait, trust it over our guess."""
     header = response.headers.get("Retry-After")
     if not header:
         return None
     try:
-        return min(float(header), 30.0)   # cap it - we won't wait forever
+        return min(float(header), 30.0)
     except ValueError:
-        return None                       # it can also be an HTTP date; ignore
+        return None
 
 
 def describe_success(response, elapsed_ms, attempts):
-    """
-    Read a 200 reply and decide whether it is actually USABLE.
-
-    A 200 only means the network call worked. The model can still hand back
-    an empty string, or stop mid-sentence because it ran out of tokens.
-    Those are failures, and pretending otherwise poisons everything downstream.
-    """
+    """Read a 200 reply and decide whether it is actually USABLE."""
     try:
         data = response.json()
         choice = data["choices"][0]
@@ -97,14 +72,12 @@ def describe_success(response, elapsed_ms, attempts):
         "attempts": attempts,
         "finish_reason": finish_reason,
         "tokens": usage.get("total_tokens", 0),
-        # None means "not reported", which is NOT the same as zero.
         "reasoning_tokens": details.get("reasoning_tokens"),
         "served_by": data.get("model", "?"),
         "content_chars": len(content),
         "reply": content[:40],
     }
 
-    # --- the content gate -------------------------------------------------
     if finish_reason == "length":
         result["ok"] = False
         result["failure_stage"] = "content"
@@ -118,11 +91,7 @@ def describe_success(response, elapsed_ms, attempts):
 
 
 def call_model(model_id, question=TEST_QUESTION):
-    """
-    Send one question to one model, retrying when it makes sense to.
-
-    Always returns a dict. A dead model is data, not a crash.
-    """
+    """Send one question to one model, retrying when it makes sense to."""
     detail = "no attempt made"
 
     for attempt in range(1, MAX_ATTEMPTS + 1):
@@ -144,7 +113,6 @@ def call_model(model_id, question=TEST_QUESTION):
                 timeout=60,
             )
         except requests.RequestException as error:
-            # No reply at all. Usually worth one more go.
             detail = f"network error: {error}"
             if attempt < MAX_ATTEMPTS:
                 wait = backoff_seconds(attempt)
@@ -163,7 +131,6 @@ def call_model(model_id, question=TEST_QUESTION):
         body = response.text[:120].replace("\n", " ")
 
         if status in FATAL:
-            # No point trying again - this will fail identically forever.
             return {"ok": False, "failure_stage": "http",
                     "detail": f"HTTP {status} (fatal): {body}",
                     "ms": elapsed_ms, "attempts": attempt}
@@ -177,7 +144,6 @@ def call_model(model_id, question=TEST_QUESTION):
             time.sleep(wait)
             continue
 
-        # Unknown status code, or we've run out of attempts.
         return {"ok": False, "failure_stage": "http", "detail": detail,
                 "ms": elapsed_ms, "attempts": attempt}
 

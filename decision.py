@@ -1,9 +1,5 @@
 """
-decision.py - build the Decision Object.
-
-The contract. Every run produces one of these, whatever happened: decided,
-no_decision, or refused. A refusal is a complete, valid Decision Object, not
-an error and not an empty response.
+Build the Decision Object. Every run produces one, including refusals.
 """
 
 import datetime
@@ -19,26 +15,14 @@ def now_utc():
 
 
 def config_hash(snapshot):
-    """
-    Fingerprint the exact configuration used for this run.
-
-    Canonical form matters: sorted keys and no incidental whitespace, so the
-    hash tracks the config's CONTENT and not how it happened to be formatted.
-    Two runs with the same settings must produce the same hash.
-    """
+    """Fingerprint the exact configuration used for this run."""
     canonical = json.dumps(snapshot, sort_keys=True, separators=(",", ":"))
     return "sha256:" + hashlib.sha256(canonical.encode("utf-8")).hexdigest()
 
 
 def build_decision(question, run, aggregation, config_snapshot,
                    citations=None, audit_ref=None):
-    """
-    Assemble the Decision Object from what actually happened.
-
-    Nothing here is invented: latencies, token counts and costs are the numbers
-    the provider reported, and cost_usd is SUMMED from those rather than
-    hardcoded to zero. The zero is measured, not claimed.
-    """
+    """Assemble the Decision Object from what actually happened."""
     citations = citations or []
     candidates = run.get("candidates", [])
     judgements = run.get("judgements", []) or []
@@ -47,7 +31,7 @@ def build_decision(question, run, aggregation, config_snapshot,
         {
             "model_id": c["model_id"],
             "family": c["family"],
-            "served_by": c.get("served_by"),   # what actually ran, not what we asked for
+            "served_by": c.get("served_by"),
             "label": c.get("label"),
             "ok": c["ok"],
             "abstained": c["abstained"],
@@ -117,13 +101,7 @@ def build_decision(question, run, aggregation, config_snapshot,
 
 
 def refused_decision(question, reason, rule, config_snapshot, audit_ref=None):
-    """
-    A pre-gate refusal. Zero API calls were made.
-
-    Deliberately the same shape as any other decision: same fields, same schema,
-    valid against the same contract. "The system declined" is a legitimate,
-    well-formed output.
-    """
+    """A pre-gate refusal. Zero API calls were made."""
     return {
         "decision_id": str(uuid.uuid4()),
         "schema_version": SCHEMA_VERSION,

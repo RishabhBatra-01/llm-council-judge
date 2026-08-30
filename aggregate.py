@@ -1,40 +1,13 @@
 """
-aggregate.py - turn judge scorecards into a winner and an EARNED confidence.
-
-No model is consulted here. Every decision in this file is made by arithmetic
-we wrote and can explain. That is the whole point: confidence must come from
-things we observed, never from a model telling us how sure it feels.
-
-Nothing here touches the network. It is pure functions over plain data, which
-is why it can be developed and tested offline against saved runs.
+Turn judge scorecards into a winner and an earned confidence score.
+No model is consulted here.
 """
 
-# ===========================================================================
-# POLICY - all of it lives in config.yaml, loaded once by config.py.
-#
-# Re-exported here so a reviewer reading the formula can see every number it
-# depends on without leaving the file, and so the rest of the codebase has one
-# import path for policy. The values themselves are not defined here:
-# config.yaml is the single source of truth, and it is what config_hash
-# fingerprints into every Decision Object.
-#
-#   RUBRIC                    criteria and their weights (judges never see these)
-#   SIGNAL_WEIGHTS            how much each observable signal contributes
-#   CAPS                      ceilings; lowest triggered one wins
-#   MARGIN_FULL_SCALE         gap on the 0-5 scale that counts as decisive
-#   DISCRIMINATION_THRESHOLD  below this spread, a judge expressed no preference
-#   TIE_EPSILON               closer than this and candidates are tied, not ranked
-#   NO_DECISION_THRESHOLD     below this we decline rather than decide
-# ===========================================================================
 
 from config import (CAPS, DISCRIMINATION_THRESHOLD, LOW_JUDGE_AGREEMENT,
                     MARGIN_FULL_SCALE, NO_DECISION_THRESHOLD, RUBRIC,
                     SCORE_MAX, SCORE_MIN, SIGNAL_WEIGHTS, TIE_EPSILON)
 
-
-# ===========================================================================
-# PER-JUDGE READINGS
-# ===========================================================================
 
 def weighted_total(criterion_scores):
     """Apply OUR weights to one judge's raw criterion scores. Range 0-5."""
@@ -49,31 +22,14 @@ def judge_totals(judgement):
 
 
 def is_discriminating(totals):
-    """
-    Did this judge express a preference at all?
-
-    A judge that gives every candidate the same score sits numerically close to
-    every other judge, so a naive agreement signal would read it as STRONG
-    agreement and push confidence up - when it said nothing. Zero variance is
-    abstention wearing agreement's clothes.
-
-    Observed live: one judge returned a valid scorecard of 5/5/5/5 for all three
-    candidates. On a harder question the same model discriminated sharply and a
-    different judge went flat - so this is a per-RUN property, never a per-model
-    one, and the check runs on every judge every time.
-    """
+    """Did this judge express a preference at all?"""
     if len(totals) < 2:
         return False
     return (max(totals.values()) - min(totals.values())) >= DISCRIMINATION_THRESHOLD
 
 
 def judge_pick(totals):
-    """
-    This judge's top candidate, or None if its own top two are tied.
-
-    A judge that scores its leaders equally has not chosen. Reading a winner out
-    of a coin-flip-sized gap would invent a preference it never expressed.
-    """
+    """This judge's top candidate, or None if its own top two are tied."""
     if not totals:
         return None
 
@@ -85,17 +41,8 @@ def judge_pick(totals):
     return ranked[0][0]
 
 
-# ===========================================================================
-# SIGNALS
-# ===========================================================================
-
 def _rank_agreement(first, second, labels):
-    """
-    Fraction of candidate PAIRS the two judges ordered the same way.
-
-    Kendall-style concordance. Ties on either side count as half credit,
-    because a tie is neither agreement nor contradiction.
-    """
+    """Fraction of candidate PAIRS the two judges ordered the same way."""
     pairs = [(labels[i], labels[j])
              for i in range(len(labels))
              for j in range(i + 1, len(labels))]
@@ -108,30 +55,15 @@ def _rank_agreement(first, second, labels):
         gap_second = second[left] - second[right]
 
         if gap_first == 0 or gap_second == 0:
-            score += 0.5                      # one judge expressed no order
+            score += 0.5
         elif (gap_first > 0) == (gap_second > 0):
-            score += 1.0                      # same ordering
-        # opposite ordering scores 0
+            score += 1.0
 
     return score / len(pairs)
 
 
 def signal_inter_judge_agreement(all_totals):
-    """
-    How closely two judges agreed - on BOTH the numbers and the ordering.
-
-    Returns None when the question cannot be asked: fewer than two judges that
-    expressed a preference. None is not 0.0 and not 1.0. "We have no evidence
-    either way" is a third state, and collapsing it into either number is a lie
-    about what we know.
-
-    We take the MINIMUM of two readings, because agreement means agreeing on
-    both counts. Observed live: two judges scored the same three answers within
-    0.65 of each other on a 0-5 scale - proximity 0.89, which reads as near
-    perfect agreement - while ranking them in opposite orders. One put candidate
-    B first, the other put B last. Score proximity alone called that agreement.
-    It is not.
-    """
+    """How closely two judges agreed - on BOTH the numbers and the ordering."""
     if len(all_totals) < 2:
         return None
 
@@ -161,14 +93,7 @@ def signal_score_margin(combined):
 
 
 def signal_winner_quality(combined):
-    """
-    How good the best candidate actually is, on its own terms (0-1).
-
-    The companion to score_margin. A narrow win among excellent answers is a
-    low-risk choice; a narrow win among poor ones is not. Margin alone cannot
-    distinguish those, and reading a thin margin as weak evidence caused the
-    council to decline a question every generator answered correctly.
-    """
+    """How good the best candidate actually is, on its own terms (0-1)."""
     if not combined:
         return None
     return max(combined.values()) / SCORE_MAX
@@ -181,13 +106,7 @@ def _content_words(text):
 
 
 def signal_agent_agreement(candidates):
-    """
-    Mean pairwise word overlap (Jaccard) between usable answers.
-
-    A rough lexical measure, not a semantic one: two answers can agree in
-    substance and share few words, or share many words and contradict. It is
-    weighted low partly for that reason and partly because of trap #2.
-    """
+    """Mean pairwise word overlap (Jaccard) between usable answers."""
     texts = [c["answer"] for c in candidates if c["ok"] and not c["abstained"]]
     if len(texts) < 2:
         return None
@@ -204,25 +123,7 @@ def signal_agent_agreement(candidates):
 
 
 def signal_verification_pass_rate(citations, winner_label=None):
-    """
-    Share of the WINNER's citations that checked out. None when it cited nothing.
-
-    Scoped to the winner on purpose. Confidence here is confidence in the
-    decision - in the answer we chose - and a verified source on an answer we
-    discarded says nothing about whether the winner is trustworthy. An earlier
-    version counted every candidate's citations, which let a verified link on a
-    rejected answer contribute the second-largest share of confidence in a
-    decision whose winner cited nothing at all.
-
-    Note this signal is winner-scoped while the `citation_failed` CEILING is
-    not. A broken citation anywhere in the pool is evidence that this topic
-    invites fabrication, and that bounds the whole decision. But the RATE is a
-    property of the answer we are actually handing over.
-
-    None, not 1.0: "made no claims needing a source" must not score the same as
-    "made claims and every source held up". A free pass for silence would reward
-    vagueness.
-    """
+    """Share of the WINNER's citations that checked out. None when it cited nothing."""
     if winner_label is not None:
         citations = [c for c in citations if c.get("label") == winner_label]
     if not citations:
@@ -231,19 +132,9 @@ def signal_verification_pass_rate(citations, winner_label=None):
     return verified / len(citations)
 
 
-# ===========================================================================
-# BLEND + CEILINGS
-# ===========================================================================
-
 def blend(signals):
-    """
-    Weighted average over the signals we actually have.
-
-    Missing signals are DROPPED and the remaining weights renormalised - never
-    filled with a default. Substituting 0.5 for a signal we could not measure
-    would put an invented number into the output and present it as an
-    observation. If nothing is measurable, the answer is 0.0, not a guess.
-    """
+    """Weighted average over the signals we actually have."""
+    # Unmeasurable signals are dropped and the rest renormalised, never defaulted.
     available = {name: value for name, value in signals.items() if value is not None}
     if not available:
         return 0.0, {}
@@ -260,20 +151,13 @@ def apply_caps(raw_score, triggered):
     """Lowest triggered ceiling wins. Ceilings cannot be averaged away."""
     if not triggered:
         return raw_score, []
+    # Lowest ceiling wins; a ceiling cannot be averaged away.
     ceiling = min(CAPS[name] for name in triggered)
     return min(raw_score, ceiling), sorted(triggered)
 
 
-# ===========================================================================
-# THE AGGREGATOR
-# ===========================================================================
-
 def aggregate(run, citations=None):
-    """
-    Decide. Returns a dict of winner, status, confidence, risks and workings.
-
-    Status is one of: decided | no_decision. (refused comes from the pre-gate.)
-    """
+    """Decide. Returns a dict of winner, status, confidence, risks and workings."""
     citations = citations or []
     candidates = run["candidates"]
     judgements = run.get("judgements") or []
@@ -286,7 +170,6 @@ def aggregate(run, citations=None):
     caps_triggered = set()
     notes = []
 
-    # --- not enough to compare -------------------------------------------
     if len(usable) < 2:
         if abstained and not usable:
             detail = (f"All {len(abstained)} responding generators abstained. "
@@ -313,7 +196,6 @@ def aggregate(run, citations=None):
                        "a usable answer; council diversity reduced."),
         })
 
-    # --- read the judges ---------------------------------------------------
     ok_judges = [j for j in judgements if j["ok"]]
 
     if len(ok_judges) < len(judgements):
@@ -342,7 +224,6 @@ def aggregate(run, citations=None):
         return _no_decision(run, usable, abstained, failed, judgements,
                             risks, detail)
 
-    # --- discrimination check (our own trap) -------------------------------
     discriminating = []
     for judgement in ok_judges:
         totals = judge_totals(judgement)
@@ -362,17 +243,12 @@ def aggregate(run, citations=None):
     if len(discriminating) < 2:
         caps_triggered.add("single_effective_judge")
 
-    # Only judges that expressed a preference get to choose the winner.
     ranking_judges = discriminating or ok_judges
 
     picks = [judge_pick(j["_totals"]) for j in ranking_judges]
     named = [pick for pick in picks if pick is not None]
     real_picks = set(named)
 
-    # Discriminating is not the same as decisive. A judge can spread its scores
-    # widely and still tie its own top two - it separated the field without
-    # naming a winner. When only one judge could name one, there was no
-    # cross-check on the choice, whatever the numbers look like.
     if len(named) < 2:
         caps_triggered.add("single_effective_judge")
 
@@ -384,7 +260,6 @@ def aggregate(run, citations=None):
                        f"{sorted(real_picks)}."),
         })
 
-    # --- combine -----------------------------------------------------------
     labels = sorted({label for j in ranking_judges for label in j["_totals"]})
     combined = {
         label: sum(j["_totals"].get(label, 0.0) for j in ranking_judges)
@@ -394,10 +269,6 @@ def aggregate(run, citations=None):
 
     ranked = sorted(combined.items(), key=lambda pair: pair[1], reverse=True)
 
-    # --- measure everything we can, BEFORE deciding anything ---------------
-    # A no_decision must still report what we observed. Returning "unavailable"
-    # for signals we actually measured would throw away evidence and make the
-    # object less honest, not more cautious.
     if any(c.get("status") == "failed" for c in citations):
         caps_triggered.add("citation_failed")
         risks.append({
@@ -411,20 +282,15 @@ def aggregate(run, citations=None):
         "score_margin": signal_score_margin(combined),
         "winner_quality": signal_winner_quality(combined),
         "agent_agreement": signal_agent_agreement(candidates),
-        # ranked[0] is the provisional winner; the tie-break below may still
-        # reorder or decline, but the pass rate is about whichever answer we
-        # would hand over.
         "verification_pass_rate": signal_verification_pass_rate(
             citations, ranked[0][0] if ranked else None),
     }
 
-    # --- tie-break ---------------------------------------------------------
     tie_broken_by = None
     if len(ranked) >= 2 and (ranked[0][1] - ranked[1][1]) < TIE_EPSILON:
         contenders = [label for label, total in ranked
                       if ranked[0][1] - total < TIE_EPSILON]
 
-        # Rule 1: prefer the candidate with more VERIFIED citations.
         verified_count = {
             label: sum(1 for c in citations
                        if c.get("label") == label and c.get("status") == "verified")
@@ -438,7 +304,6 @@ def aggregate(run, citations=None):
             ranked = ([(leaders[0], combined[leaders[0]])] +
                       [pair for pair in ranked if pair[0] != leaders[0]])
         else:
-            # Rule 2: there is no rule 2. We decline rather than coin-flip.
             detail = (f"Top candidates {sorted(contenders)} are within "
                       f"{TIE_EPSILON} on the combined score and no verified "
                       "citation separates them.")
@@ -450,21 +315,9 @@ def aggregate(run, citations=None):
     winner_label, winner_total = ranked[0]
     runner_label, _ = ranked[1] if len(ranked) > 1 else (None, None)
 
-    # The tie-break may have changed who wins. Recompute the winner-scoped
-    # signal for whoever ACTUALLY won, not whoever was provisionally ahead when
-    # the signals were first measured. Observed: a tie-break promoted candidate
-    # A, whose two verified citations went uncounted because the rate had been
-    # computed for candidate C.
     signals["verification_pass_rate"] = signal_verification_pass_rate(
         citations, winner_label)
 
-    # --- surface ambiguity even when we DO decide --------------------------
-    # A low confidence number alone is not disclosure. Someone reading risks[]
-    # must be able to see WHY the number is low without recomputing it, so the
-    # conditions that suppressed it are stated as risks in their own right.
-    # The brief allows an ambiguous question to resolve as no_decision OR as a
-    # decision carrying a flagged ambiguity risk. Deciding SILENTLY is the
-    # failure; deciding is not.
     if tie_broken_by:
         risks.append({
             "type": "ambiguity", "severity": "high",
@@ -563,9 +416,6 @@ def _no_decision(run, usable, abstained, failed, judgements, risks, detail,
         "runner_up_answer": None,
         "winner_label": None,
         "confidence": {
-            # 0.0 is not a measurement of doubt - it records that there is no
-            # decision here to be confident about. The signals below say what
-            # we actually observed on the way to declining.
             "score": 0.0,
             "method": f"No decision reached: {detail} Confidence is 0.0 by "
                       "definition - there is no decision to be confident about. "
