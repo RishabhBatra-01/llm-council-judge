@@ -308,3 +308,61 @@ by our own judge, in one word.
 Output *content* varies between runs, not just length.
 
 ## Quota: ~53 requests used on 2026-08-30.
+
+---
+
+## Two bugs the citation work exposed (2026-08-30)
+
+Both were the same shape: a signal that was real, measured correctly, and
+attached to the wrong thing. Neither crashed. Both produced plausible numbers.
+
+**1. verification_pass_rate counted citations from REJECTED answers.**
+On `easy`, a verified Wikipedia link on candidate A contributed 0.231 - the
+second-largest share of confidence - in a decision whose winner (B) had cited
+nothing at all. Fixed by scoping the rate to the winning answer.
+
+The `citation_failed` CEILING is deliberately left un-scoped: a broken citation
+anywhere in the pool is evidence the topic invites fabrication, and that bounds
+the whole run. The RATE is a property of the answer we hand over; the CEILING is
+a property of the run.
+
+**2. The winner-scoped signal was computed before the tie-break could change
+the winner.** On `contested`, signals were measured against provisional leader C
+(4.70), then the citation tie-break promoted A - whose 2-of-3 verified sources
+went uncounted. Fixed by recomputing after the winner settles.
+
+---
+
+## The disclosure defect - the most important fix in the project
+
+After both fixes, `contested` flipped from `no_decision` to `decided` at 0.369.
+The risks array contained **only** the "gates.py missing" warning. Nothing said
+the judges had ranked the candidates in opposite orders, that the margin was
+0.025, or that the winner had been chosen by a fallback criterion.
+`tie_broken_by` sat in `workings`, which nobody reads.
+
+> **A low confidence number is not disclosure.** Someone reading `risks[]` must
+> be able to see WHY the number is low without recomputing it.
+
+We nearly "fixed" this by adding a ceiling on tie-broken decisions until the
+status flipped back to `no_decision`. That would have been tuning the policy to
+match an expectation we wrote ourselves - the exact failure this system exists
+to prevent, one level up from the code.
+
+Re-reading the brief settled it: an ambiguous question may resolve as
+"no_decision OR a flagged ambiguity risk". Both are correct. **Deciding was
+never the defect. Deciding silently was.**
+
+Three ambiguity risks now fire: tie-break used, judge agreement below 0.50, and
+fewer than two judges naming a winner. The eval expectation became
+`expect: [no_decision, decided]` + `require_risk: ambiguity`, which tests
+something more precise than a status match - it asserts that when the system
+decides under ambiguity, it says so.
+
+Also added: `single_effective_judge` now triggers when fewer than two judges
+NAME a winner, not only when fewer than two discriminate. A judge can spread its
+scores widely and still tie its own top two - it separated the field without
+choosing.
+
+## Offline eval status: 3/3 matched (factual, ambiguous, unknowable).
+`unsafe` and `citable` need gates.py and a live run.

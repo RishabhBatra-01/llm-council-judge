@@ -10,61 +10,26 @@ is why it can be developed and tested offline against saved runs.
 """
 
 # ===========================================================================
-# POLICY  (all of this moves to config.yaml in Step 6)
+# POLICY - all of it lives in config.yaml, loaded once by config.py.
+#
+# Re-exported here so a reviewer reading the formula can see every number it
+# depends on without leaving the file, and so the rest of the codebase has one
+# import path for policy. The values themselves are not defined here:
+# config.yaml is the single source of truth, and it is what config_hash
+# fingerprints into every Decision Object.
+#
+#   RUBRIC                    criteria and their weights (judges never see these)
+#   SIGNAL_WEIGHTS            how much each observable signal contributes
+#   CAPS                      ceilings; lowest triggered one wins
+#   MARGIN_FULL_SCALE         gap on the 0-5 scale that counts as decisive
+#   DISCRIMINATION_THRESHOLD  below this spread, a judge expressed no preference
+#   TIE_EPSILON               closer than this and candidates are tied, not ranked
+#   NO_DECISION_THRESHOLD     below this we decline rather than decide
 # ===========================================================================
 
-RUBRIC = {
-    "accuracy":     0.40,
-    "calibration":  0.25,
-    "completeness": 0.20,
-    "reasoning":    0.15,
-}
-
-SCORE_MIN, SCORE_MAX = 0, 5
-
-# How much each observable signal contributes, when it is available.
-SIGNAL_WEIGHTS = {
-    "inter_judge_agreement":  0.35,
-    "score_margin":           0.20,
-    # score_margin measures SEPARATION, not quality. Three candidates all
-    # scoring 5.0 and three all scoring 2.0 both produce a margin near zero -
-    # identical signal, opposite realities. Absolute winner quality is what
-    # tells them apart, so it carries equal weight to the margin.
-    "winner_quality":         0.20,
-    # Deliberately LOW. Three models agreeing may be one wrong prior shared
-    # three times (trap #2). Agreement is real evidence, but weak, and we can
-    # never tell from the agreement itself which kind we have.
-    "agent_agreement":        0.10,
-    "verification_pass_rate": 0.15,
-}
-
-# A 1.0-point gap on the 0-5 weighted scale counts as a decisive margin.
-# Judges in practice spread candidates by well under a point, so normalising
-# by the full 0-5 range would make every margin look negligible.
-MARGIN_FULL_SCALE = 1.0
-
-# A judge whose weighted totals span less than this has expressed no preference.
-DISCRIMINATION_THRESHOLD = 0.05
-
-# Two candidates closer than this on the combined score are tied, not ranked.
-TIE_EPSILON = 0.10
-
-# Below this, we decline rather than decide.
-NO_DECISION_THRESHOLD = 0.35
-
-# Ceilings. Each says: regardless of every other signal, this specific failure
-# means we cannot be this confident. The lowest triggered ceiling wins.
-#
-# Ceilings, not penalties, on purpose: an average lets one strong signal hide a
-# serious problem. A ceiling cannot be averaged away.
-CAPS = {
-    "judges_disagree_on_winner": 0.45,
-    "single_effective_judge":    0.50,
-    "judge_failed":              0.50,
-    "judge_contamination":       0.40,
-    "citation_failed":           0.50,
-    "reduced_generator_pool":    0.75,
-}
+from config import (CAPS, DISCRIMINATION_THRESHOLD, LOW_JUDGE_AGREEMENT,
+                    MARGIN_FULL_SCALE, NO_DECISION_THRESHOLD, RUBRIC,
+                    SCORE_MAX, SCORE_MIN, SIGNAL_WEIGHTS, TIE_EPSILON)
 
 
 # ===========================================================================
@@ -238,14 +203,28 @@ def signal_agent_agreement(candidates):
     return sum(scores) / len(scores) if scores else None
 
 
-def signal_verification_pass_rate(citations):
+def signal_verification_pass_rate(citations, winner_label=None):
     """
-    Share of citations that actually checked out. None when nothing was cited.
+    Share of the WINNER's citations that checked out. None when it cited nothing.
+
+    Scoped to the winner on purpose. Confidence here is confidence in the
+    decision - in the answer we chose - and a verified source on an answer we
+    discarded says nothing about whether the winner is trustworthy. An earlier
+    version counted every candidate's citations, which let a verified link on a
+    rejected answer contribute the second-largest share of confidence in a
+    decision whose winner cited nothing at all.
+
+    Note this signal is winner-scoped while the `citation_failed` CEILING is
+    not. A broken citation anywhere in the pool is evidence that this topic
+    invites fabrication, and that bounds the whole decision. But the RATE is a
+    property of the answer we are actually handing over.
 
     None, not 1.0: "made no claims needing a source" must not score the same as
     "made claims and every source held up". A free pass for silence would reward
     vagueness.
     """
+    if winner_label is not None:
+        citations = [c for c in citations if c.get("label") == winner_label]
     if not citations:
         return None
     verified = sum(1 for c in citations if c.get("status") == "verified")
@@ -387,7 +366,16 @@ def aggregate(run, citations=None):
     ranking_judges = discriminating or ok_judges
 
     picks = [judge_pick(j["_totals"]) for j in ranking_judges]
-    real_picks = {pick for pick in picks if pick is not None}
+    named = [pick for pick in picks if pick is not None]
+    real_picks = set(named)
+
+    # Discriminating is not the same as decisive. A judge can spread its scores
+    # widely and still tie its own top two - it separated the field without
+    # naming a winner. When only one judge could name one, there was no
+    # cross-check on the choice, whatever the numbers look like.
+    if len(named) < 2:
+        caps_triggered.add("single_effective_judge")
+
     if len(real_picks) > 1:
         caps_triggered.add("judges_disagree_on_winner")
         risks.append({
@@ -423,7 +411,11 @@ def aggregate(run, citations=None):
         "score_margin": signal_score_margin(combined),
         "winner_quality": signal_winner_quality(combined),
         "agent_agreement": signal_agent_agreement(candidates),
-        "verification_pass_rate": signal_verification_pass_rate(citations),
+        # ranked[0] is the provisional winner; the tie-break below may still
+        # reorder or decline, but the pass rate is about whichever answer we
+        # would hand over.
+        "verification_pass_rate": signal_verification_pass_rate(
+            citations, ranked[0][0] if ranked else None),
     }
 
     # --- tie-break ---------------------------------------------------------
@@ -457,6 +449,46 @@ def aggregate(run, citations=None):
 
     winner_label, winner_total = ranked[0]
     runner_label, _ = ranked[1] if len(ranked) > 1 else (None, None)
+
+    # The tie-break may have changed who wins. Recompute the winner-scoped
+    # signal for whoever ACTUALLY won, not whoever was provisionally ahead when
+    # the signals were first measured. Observed: a tie-break promoted candidate
+    # A, whose two verified citations went uncounted because the rate had been
+    # computed for candidate C.
+    signals["verification_pass_rate"] = signal_verification_pass_rate(
+        citations, winner_label)
+
+    # --- surface ambiguity even when we DO decide --------------------------
+    # A low confidence number alone is not disclosure. Someone reading risks[]
+    # must be able to see WHY the number is low without recomputing it, so the
+    # conditions that suppressed it are stated as risks in their own right.
+    # The brief allows an ambiguous question to resolve as no_decision OR as a
+    # decision carrying a flagged ambiguity risk. Deciding SILENTLY is the
+    # failure; deciding is not.
+    if tie_broken_by:
+        risks.append({
+            "type": "ambiguity", "severity": "high",
+            "detail": (f"Top candidates were within {TIE_EPSILON} on the "
+                       f"combined score. The winner was chosen by "
+                       f"{tie_broken_by}, not on rubric merit."),
+        })
+
+    agreement = signals["inter_judge_agreement"]
+    if agreement is not None and agreement < LOW_JUDGE_AGREEMENT:
+        risks.append({
+            "type": "ambiguity", "severity": "high",
+            "detail": (f"Judge agreement was {agreement:.2f} (below "
+                       f"{LOW_JUDGE_AGREEMENT}): the judges ordered the "
+                       "candidates differently, so this ranking rests on "
+                       "little cross-checked evidence."),
+        })
+
+    if len(named) < 2:
+        risks.append({
+            "type": "ambiguity", "severity": "med",
+            "detail": ("Only one judge named a winner; the other tied its own "
+                       "top candidates. No second opinion on the choice."),
+        })
 
     raw_score, contributions = blend(signals)
     score, applied_caps = apply_caps(raw_score, caps_triggered)

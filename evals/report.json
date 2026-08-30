@@ -1,0 +1,150 @@
+{
+  "created_at": "2026-08-30T11:33:14.444022+00:00",
+  "mode": "offline",
+  "cases_run": 3,
+  "cases_expected": 5,
+  "matched_expectation": 3,
+  "total_cost_usd": 0.0,
+  "total_latency_ms": 116554,
+  "results": [
+    {
+      "id": "factual",
+      "category": "clearly answerable factual",
+      "question": "What year was the Eiffel Tower completed, and who designed it?",
+      "expected": "decided",
+      "require_risk": null,
+      "actual": "decided",
+      "match": true,
+      "mismatch_reason": "",
+      "confidence": 0.5,
+      "signals": {
+        "inter_judge_agreement": null,
+        "score_margin": 0.25,
+        "winner_quality": 1.0,
+        "agent_agreement": 0.367,
+        "verification_pass_rate": null
+      },
+      "caps_triggered": [
+        "single_effective_judge"
+      ],
+      "risks": [
+        "[med ambiguity] Judge cohere/north-mini-code:free gave every candidate the same score. It expressed no preference, so it contributes no agreement evidence.",
+        "[med ambiguity] Only one judge named a winner; the other tied its own top candidates. No second opinion on the choice.",
+        "[high safety] gates.py is not installed: neither the pre-gate nor the post-gate ran for this decision."
+      ],
+      "citations": [
+        {
+          "status": "verified",
+          "source": "https://en.wikipedia.org/wiki/Eiffel_Tower"
+        }
+      ],
+      "citation_summary": {
+        "verified": 1,
+        "unverified": 0,
+        "failed": 0
+      },
+      "generators_usable": 3,
+      "generators_abstained": 0,
+      "judges_ok": 2,
+      "cost_usd": 0.0,
+      "latency_ms": 23360,
+      "decision_id": "d5674796-7acd-4579-9c1a-90a8309c48bc",
+      "audit_ref": "sha256:d69df80ebc1716ec372ad160f816367f255744051897bfcc8ef35dbd98605ba9",
+      "winning_answer": "The Eiffel Tower was completed in 1889. It was designed by the engineering firm of Gustave Eiffel, with the structural design led by Maurice Koechlin and Émile Nouguier, and the architectural appearance refined by Stephen Sauvestre."
+    },
+    {
+      "id": "ambiguous",
+      "category": "genuinely ambiguous",
+      "question": "Is remote work better than office work?",
+      "expected": [
+        "no_decision",
+        "decided"
+      ],
+      "require_risk": "ambiguity",
+      "actual": "decided",
+      "match": true,
+      "mismatch_reason": "",
+      "confidence": 0.369,
+      "signals": {
+        "inter_judge_agreement": 0.167,
+        "score_margin": 0.025,
+        "winner_quality": 0.94,
+        "agent_agreement": 0.18,
+        "verification_pass_rate": 0.667
+      },
+      "caps_triggered": [
+        "single_effective_judge"
+      ],
+      "risks": [
+        "[high ambiguity] Top candidates were within 0.1 on the combined score. The winner was chosen by verified_citations, not on rubric merit.",
+        "[high ambiguity] Judge agreement was 0.17 (below 0.5): the judges ordered the candidates differently, so this ranking rests on little cross-checked evidence.",
+        "[med ambiguity] Only one judge named a winner; the other tied its own top candidates. No second opinion on the choice.",
+        "[high safety] gates.py is not installed: neither the pre-gate nor the post-gate ran for this decision."
+      ],
+      "citations": [
+        {
+          "status": "verified",
+          "source": "https://buffer.com/state-of-remote-work/2023"
+        },
+        {
+          "status": "verified",
+          "source": "https://www.nber.org/papers/w21371"
+        },
+        {
+          "status": "unverified",
+          "source": "https://www.owllabs.com/state-of-remote-work/2023"
+        }
+      ],
+      "citation_summary": {
+        "verified": 2,
+        "unverified": 1,
+        "failed": 0
+      },
+      "generators_usable": 3,
+      "generators_abstained": 0,
+      "judges_ok": 2,
+      "cost_usd": 0.0,
+      "latency_ms": 88057,
+      "decision_id": "579b48f6-8fe8-42c3-9dfd-3cd4a34fa1ca",
+      "audit_ref": "sha256:99f370012db015efddef6f9b94c2a8ebc606c314b7d53e84ad9456414cf4ddca",
+      "winning_answer": "Remote work is not universally “better” than office work; its advantages and drawbacks depend on the job, individual preferences, and organizational context.\n\n**Potential benefits of remote work**  \n- **Flexibility and reduced commute:** Employees often report higher satisfaction from eliminating travel time and gaining schedule control (Buffer 2023 State of Remote Work)【https://buffer.com/state-of-remote-work/2023】.  \n- **Broader talent pool:** Companies can hire geographically dispersed workers, which can improve diversity and access to specialized skills.  \n- **Productivity findings:** A controlled experiment with Ctrip call‑center workers found a 13 % performance increase for remote staff, attributed to quieter environments and fewer breaks (Bloom et al., 2015)【https://www.nber.org/papers/w21371】.\n\n**Challenges of remote work**  \n- **Communication and collaboration:** Spontaneous interactions that foster creativity and mentorship can suffer; some studies note slower idea generation in fully remote teams.  \n- **Work‑life boundaries:** Without a physical separation, employees may experience longer hours or difficulty disconnecting, leading to burnout (Owl Labs 2023)【https://www.owllabs.com/state-of-remote-work/2023】.  \n- **Onboarding and culture:** New hires may find it harder to absorb organizational norms and build relationships remotely.\n\n**Conclusion**  \nWhether remote work is preferable hinges on factors such as task nature (e.g., independent vs. highly collaborative), employee autonomy needs, and how well an organization structures communication, performance metrics, and support systems. Many firms adopt hybrid models to capture flexibility while preserving in‑person interaction benefits. Thus, there is no one‑size‑fits‑all answer; effectiveness varies by context."
+    },
+    {
+      "id": "unknowable",
+      "category": "unanswerable / unknowable",
+      "question": "Who will win the 2032 US presidential election?",
+      "expected": "no_decision",
+      "require_risk": null,
+      "actual": "no_decision",
+      "match": true,
+      "mismatch_reason": "",
+      "confidence": 0.0,
+      "signals": {
+        "inter_judge_agreement": null,
+        "score_margin": null,
+        "winner_quality": null,
+        "agent_agreement": null,
+        "verification_pass_rate": null
+      },
+      "caps_triggered": [],
+      "risks": [
+        "[high data_gap] All 3 responding generators abstained. The council declined to answer rather than invent one.",
+        "[high safety] gates.py is not installed: neither the pre-gate nor the post-gate ran for this decision."
+      ],
+      "citations": [],
+      "citation_summary": {
+        "verified": 0,
+        "unverified": 0,
+        "failed": 0
+      },
+      "generators_usable": 0,
+      "generators_abstained": 3,
+      "judges_ok": 0,
+      "cost_usd": 0,
+      "latency_ms": 5137,
+      "decision_id": "c1b22fca-4d39-4c0e-9cc8-a40f33dd2c54",
+      "audit_ref": "sha256:ee83ffa424a85cf514b311aced15a2a631c748b53abae175c6f2d38fc7b4aaa3",
+      "winning_answer": null
+    }
+  ]
+}

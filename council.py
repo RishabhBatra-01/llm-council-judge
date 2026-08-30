@@ -16,75 +16,29 @@ import time
 from pathlib import Path
 
 from client import call_model
-from aggregate import (CAPS, MARGIN_FULL_SCALE, NO_DECISION_THRESHOLD,
-                       RUBRIC, SCORE_MIN, SCORE_MAX, SIGNAL_WEIGHTS,
-                       TIE_EPSILON, DISCRIMINATION_THRESHOLD,
-                       aggregate, weighted_total)
-from decision import build_decision
+from aggregate import RUBRIC, SCORE_MIN, SCORE_MAX, aggregate, weighted_total
+from config import (ABSTAIN_MARKER, CONTAMINATION_PHRASES, GENERATORS,
+                    GENERATOR_MAX_TOKENS, GENERATOR_SYSTEM_PROMPT, JUDGES,
+                    JUDGE_MAX_TOKENS, JUDGE_SYSTEM_PROMPT,
+                    MAX_JUSTIFICATION_CHARS, PAUSE_BETWEEN_CALLS)
+from config import snapshot as config_snapshot
+from decision import build_decision, refused_decision
+import citations as citations_module
 import audit
 
+# The pre-gate is a hard requirement, so its absence is reported loudly rather
+# than silently skipped. A system that quietly runs without its safety gate is
+# worse than one that refuses to start - it looks identical to one that has it.
+try:
+    import gates
+    GATES_AVAILABLE = True
+except ImportError:
+    gates = None
+    GATES_AVAILABLE = False
 
-# ===========================================================================
-# CONFIG  (moves to config.yaml in Phase 6)
-# ===========================================================================
-
-# Three distinct families. Same model three times is not a council -
-# it is one model with correlated errors and a louder voice.
-GENERATORS = [
-    {"model_id": "nvidia/nemotron-3-super-120b-a12b:free", "family": "nvidia"},
-    {"model_id": "inclusionai/ling-3.0-flash-fin:free",    "family": "inclusionai"},
-    {"model_id": "dots-studio/dots-3-note-preview:free",   "family": "dots-studio"},
-]
-
-# Neither judge shares a family with any generator.
-JUDGES = [
-    {"model_id": "minimax/minimax-m3:free",      "family": "minimax"},
-    {"model_id": "cohere/north-mini-code:free",  "family": "cohere"},
-]
-
-GENERATOR_MAX_TOKENS = 3000      # 1500 starved dots-studio on a hard question:
-                                 # all 1500 spent reasoning, 0 chars produced
-JUDGE_MAX_TOKENS = 6000          # judges read 3 answers and emit JSON.
-                                 # 2000 truncated cohere: it spent ~1900
-                                 # tokens reasoning and never reached the JSON.
-
-PAUSE_BETWEEN_CALLS = 2.0        # ~20 requests/min free-tier ceiling
 
 SAMPLES_DIR = Path("samples")
 SCHEMA_PATH = Path("schema/decision.schema.json")
-
-
-def config_snapshot():
-    """
-    Every setting that could change a decision, in one dict.
-
-    This is what config_hash fingerprints. If a run's decision would differ
-    under different settings, the setting belongs in here - otherwise the hash
-    would claim two runs were comparable when they were not.
-    """
-    return {
-        "generators": GENERATORS,
-        "judges": JUDGES,
-        "rubric": RUBRIC,
-        "score_range": [SCORE_MIN, SCORE_MAX],
-        "signal_weights": SIGNAL_WEIGHTS,
-        "caps": CAPS,
-        "thresholds": {
-            "no_decision": NO_DECISION_THRESHOLD,
-            "tie_epsilon": TIE_EPSILON,
-            "discrimination": DISCRIMINATION_THRESHOLD,
-            "margin_full_scale": MARGIN_FULL_SCALE,
-        },
-        "generation": {
-            "generator_max_tokens": GENERATOR_MAX_TOKENS,
-            "judge_max_tokens": JUDGE_MAX_TOKENS,
-            "temperature": 0,
-        },
-        "prompts": {
-            "generator": GENERATOR_SYSTEM_PROMPT,
-            "judge": JUDGE_SYSTEM_PROMPT,
-        },
-    }
 
 
 def validate_decision(decision):
@@ -107,41 +61,11 @@ def validate_decision(decision):
     return [f"{'.'.join(str(p) for p in e.path) or '<root>'}: {e.message}"
             for e in validator.iter_errors(decision)]
 
-ABSTAIN_MARKER = "INSUFFICIENT_INFORMATION"
-
-MAX_JUSTIFICATION_CHARS = 300
-
-# A judge that starts answering the question has stopped being a judge.
-CONTAMINATION_PHRASES = [
-    "the correct answer is",
-    "the answer is",
-    "here is my answer",
-    "my answer:",
-    "i would answer",
-    "the right answer",
-]
-
-
-GENERATOR_SYSTEM_PROMPT = f"""You are one member of an independent expert panel.
-Answer the question directly and completely.
-
-Rules:
-- Answer only from what you actually know. Never invent facts, figures, or sources.
-- If you cannot answer reliably, reply with exactly {ABSTAIN_MARKER} on the first
-  line, then one sentence saying what is missing.
-- If a factual claim rests on a source, put the full URL inline in that sentence.
-- Do NOT rate your own confidence. No percentages, no "I am 90% sure".
-- Keep your answer under 250 words."""
-
-
-JUDGE_SYSTEM_PROMPT = """You are a judge on an evaluation panel.
-Your ONLY job is to score candidate answers against a rubric.
-
-Absolute rules:
-- You must NOT write your own answer to the question, not even partially.
-- You must NOT rewrite, improve, or correct any candidate answer.
-- You score only what is written in front of you.
-- Return ONLY a single JSON object. No markdown fences, no commentary."""
+# ABSTAIN_MARKER, CONTAMINATION_PHRASES, MAX_JUSTIFICATION_CHARS and both
+# system prompts now come from config.yaml via config.py - see the imports.
+# The prompts are config because they change decisions: editing one changes
+# config_hash, which is correct, since runs under different prompts are not
+# comparable.
 
 
 # ===========================================================================
@@ -640,6 +564,78 @@ def load_run(name):
     return run, labelled
 
 
+def decide(question, run=None, write_audit=True, save_as=None):
+    """
+    The whole pipeline, start to finish. One question in, one Decision Object out.
+
+    pre-gate -> generators -> judges -> aggregate -> citations -> post-gate
+             -> Decision Object -> audit chain
+
+    Pass `run` to replay a frozen sample instead of calling models.
+    This is the single entry point; the CLI and the eval harness both use it,
+    so neither can drift into a different pipeline than the other.
+    """
+    # --- pre-gate: before any model is called --------------------------------
+    if run is None:
+        if not GATES_AVAILABLE:
+            print("WARNING: gates.py not found - the pre-gate is NOT running. "
+                  "Unsafe prompts will reach the models.", file=sys.stderr)
+        else:
+            allowed, rule, reason = gates.pre_gate(question)
+            if not allowed:
+                decision = refused_decision(question, reason, rule,
+                                            config_snapshot())
+                if write_audit:
+                    decision["audit_ref"] = audit.append(decision)
+                # No council ran, so there is no run and no aggregation.
+                return decision, None, None, None
+
+        run = run_council(question)
+        if save_as:
+            save_run(run, save_as)
+
+    labelled = label_candidates(run["candidates"])
+
+    # --- citations: our code opens the URLs, not a judge ---------------------
+    checked = citations_module.verify_all(run["candidates"])
+
+    aggregation = aggregate(run, citations=checked)
+
+    # --- post-gate: a safe question can still draw an unsafe answer ----------
+    if GATES_AVAILABLE and aggregation.get("winning_answer"):
+        safe, rule, reason = gates.post_gate(aggregation["winning_answer"])
+        if not safe:
+            aggregation["status"] = "refused"
+            aggregation["winning_answer"] = None
+            aggregation["runner_up_answer"] = None
+            aggregation["winner_label"] = None
+            aggregation["confidence"]["score"] = 0.0
+            aggregation["confidence"]["method"] = (
+                "Refused at the post-gate: the winning answer tripped a safety "
+                "rule. Confidence is 0.0 - the decision was withdrawn.")
+            aggregation["risks"].append({
+                "type": "safety", "severity": "high",
+                "detail": f"{reason} (post-gate rule: {rule})",
+            })
+
+    if not GATES_AVAILABLE:
+        aggregation["risks"].append({
+            "type": "safety", "severity": "high",
+            "detail": ("gates.py is not installed: neither the pre-gate nor the "
+                       "post-gate ran for this decision."),
+        })
+
+    decision = build_decision(run["question"], run, aggregation,
+                              config_snapshot(), citations=checked)
+
+    # Log BEFORE emitting. A decision that reached the user but not the log
+    # would be a decision we cannot audit - which is a decision we do not ship.
+    if write_audit:
+        decision["audit_ref"] = audit.append(decision)
+
+    return decision, aggregation, labelled, run
+
+
 def main():
     parser = argparse.ArgumentParser(
         description="LLM Council - several models answer, two judges score.")
@@ -656,31 +652,49 @@ def main():
     args = parser.parse_args()
 
     if args.offline:
-        run, labelled = load_run(args.offline)
+        run, _ = load_run(args.offline)
         print(f"[offline] replaying samples/{args.offline}.json", file=sys.stderr)
+        question = run["question"]
     elif args.question:
-        run = run_council(args.question)
-        labelled = label_candidates(run["candidates"])
-        if args.save:
-            save_run(run, args.save)
+        run, question = None, args.question
     else:
         parser.error("give a question, or --offline NAME")
 
-    aggregation = aggregate(run)
-    decision = build_decision(run["question"], run, aggregation, config_snapshot())
+    decision, aggregation, labelled, run = decide(
+        question, run=run,
+        write_audit=not args.no_audit,
+        save_as=args.save,
+    )
 
     problems = validate_decision(decision)
 
-    # Log BEFORE emitting. A decision that reached the user but not the log
-    # would be a decision we cannot audit - which is a decision we do not ship.
-    if not args.no_audit:
-        decision["audit_ref"] = audit.append(decision)
-
     if args.json:
         print(json.dumps(decision, indent=2, ensure_ascii=False))
+    elif aggregation is None:
+        # Refused at the pre-gate: no council ran, so there is no report.
+        print("=" * 74)
+        print(f"QUESTION: {question}")
+        print("=" * 74)
+        print(f"\n  status     : {decision['status']}")
+        for risk in decision["risks"]:
+            print(f"  risk       : [{risk['severity']} {risk['type']}] "
+                  f"{risk['detail']}")
+        print("\n  Refused before any model was called. 0 API calls.")
+        print(f"\n  decision_id: {decision['decision_id']}")
+        if decision["audit_ref"]:
+            print(f"  audit_ref  : {decision['audit_ref'][:30]}...")
     else:
         print_report(run["question"], run["candidates"], labelled,
                      run["judgements"])
+        if decision["citations"]:
+            print()
+            print("=" * 74)
+            print("CITATIONS")
+            print("=" * 74)
+            for citation in decision["citations"]:
+                print(f"  [{citation['status']:<10}] [{citation['label']}] "
+                      f"{citation['source'][:60]}")
+                print(f"               {citation['detail']}")
         print_decision(aggregation)
         print()
         print(f"  decision_id: {decision['decision_id']}")
