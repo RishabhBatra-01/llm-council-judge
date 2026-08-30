@@ -431,6 +431,24 @@ one that fails creatively.
 
 ## Known gaps
 
+- **The judges only use the top of the scale, and this is the most consequential
+  flaw here.** Across all 344 criterion scores in the audit chain: 79% are 5,
+  20% are 4, and four scores in total fall below 4. `minimax` has never scored
+  below 4 in any run. A 0–5 rubric being used as a 4–5 rubric compresses every
+  margin toward zero — which is what drives the ties, and what makes the
+  `factual` case decline a question the council demonstrably knows the answer
+  to. It also weakens `score_margin` and `inter_judge_agreement`, together 55%
+  of the confidence weight. The anchors need rewriting so judges will actually
+  use the lower half, or the scale needs narrowing to a range they will spread
+  across. Either way the current numbers rest on a narrower band of judgement
+  than the rubric implies.
+- **`winner_quality` was added after a failing test.** The justification is
+  sound on its own terms — `score_margin` measures separation, not quality, and
+  three candidates at 5.0 look identical to three at 2.0 — but the trigger was
+  the `factual` case declining, not the reasoning arriving first. Worth stating
+  given what this project is about.
+- **The signal weights are chosen, not derived.** 0.35 / 0.20 / 0.20 / 0.10 /
+  0.15 come from judgement about what should matter, not from any measurement.
 - **No automatic model failover.** Backups are in config; no code selects one.
   Substitution is manual.
 - **Confidence is uncalibrated.** Nobody checked whether 0.8 decisions are right
@@ -452,23 +470,28 @@ one that fails creatively.
 1. **Automatic failover.** When a generator returns a fatal status, pick a
    backup from a family not already in play and record the substitution. ~20
    lines; left undone rather than shipped untested.
-2. **Discount agreement by sample size.** One pairwise comparison should not
+2. **Fix the rubric before anything else.** Rewrite the anchors so a 2 and a 3
+   are reachable — probably by describing concrete failures rather than
+   adjectives ("states a fact that is wrong" rather than "adequate"). Then
+   re-measure the score distribution. Almost every other numeric weakness here
+   is downstream of judges using a 6-point scale as a 2-point one.
+3. **Discount agreement by sample size.** One pairwise comparison should not
    report the same number as three.
-3. **Detect ambiguity in the question.** Cheap first step: check whether the
+4. **Detect ambiguity in the question.** Cheap first step: check whether the
    answers themselves hedge. On the ambiguous question all three did, while the
    council reported no ambiguity at all.
-4. **Break ties among equally-good answers.** When candidates tie at the top of
+5. **Break ties among equally-good answers.** When candidates tie at the top of
    the scale they are interchangeable, so the cost of choosing is near zero —
    but choosing arbitrarily is what I refused to build. A rule that decides when
    `winner_quality` is very high and declines when it is not would separate "all
    excellent" from "all poor".
-5. **Calibrate the confidence score.** Run 50+ questions with known answers and
+6. **Calibrate the confidence score.** Run 50+ questions with known answers and
    check whether high-confidence decisions are actually right more often.
-6. **A second-opinion safety gate.** `nvidia/nemotron-3.5-content-safety:free`
+7. **A second-opinion safety gate.** `nvidia/nemotron-3.5-content-safety:free`
    exists on the free tier. Rules stay the primary gate, but a model check that
    can only ever refuse *more* would add coverage without giving up determinism
    on the allow path.
-7. **Ask judges for an explicit ranking** and compare it to the ranking their own
+8. **Ask judges for an explicit ranking** and compare it to the ranking their own
    scores imply. Disagreement is a cheap signal for sloppy scoring.
 
 ## The design decision I did not automate
