@@ -1,11 +1,19 @@
 {
-  "created_at": "2026-08-30T11:53:44.793066+00:00",
+  "created_at": "2026-08-30T13:08:48.051543+00:00",
   "mode": "live",
+  "degraded": true,
+  "degraded_cases": [
+    "factual",
+    "ambiguous",
+    "unknowable",
+    "citable"
+  ],
+  "degraded_note": "Every generator call failed on these cases (free-tier rate limit). Their results measure provider availability, not council logic. Note the system still emitted a valid Decision Object for each and declined rather than fabricating - but this report should not be read as a measurement of the council.",
   "cases_run": 5,
   "cases_expected": 5,
-  "matched_expectation": 2,
+  "matched_expectation": 1,
   "total_cost_usd": 0.0,
-  "total_latency_ms": 31865,
+  "total_latency_ms": 1270,
   "results": [
     {
       "id": "factual",
@@ -18,15 +26,15 @@
       "mismatch_reason": "status no_decision not in ['decided']",
       "confidence": 0.0,
       "signals": {
-        "inter_judge_agreement": 0.833,
-        "score_margin": 0.0,
-        "winner_quality": 1.0,
-        "agent_agreement": 0.422,
+        "inter_judge_agreement": null,
+        "score_margin": null,
+        "winner_quality": null,
+        "agent_agreement": null,
         "verification_pass_rate": null
       },
       "caps_triggered": [],
       "risks": [
-        "[high ambiguity] Top candidates ['B', 'C'] are within 0.1 on the combined score and no verified citation separates them."
+        "[high data_gap] No usable candidate answers: 3 generator call(s) failed."
       ],
       "citations": [],
       "citation_summary": {
@@ -34,13 +42,14 @@
         "unverified": 0,
         "failed": 0
       },
-      "generators_usable": 3,
+      "generators_usable": 0,
       "generators_abstained": 0,
-      "judges_ok": 2,
+      "generators_failed": 3,
+      "judges_ok": 0,
       "cost_usd": 0.0,
-      "latency_ms": 29954,
-      "decision_id": "9ffd8352-3728-4204-b75c-c39d485e720e",
-      "audit_ref": "sha256:36e2cf47fc98e4606ec8d0abb906f8ef3790e378ef91e20e1e8758ce61e3a4a3",
+      "latency_ms": 288,
+      "decision_id": "e32b87e1-71c9-48e9-a1a0-b8ef2006ed73",
+      "audit_ref": "sha256:1d7e8e0f611fca395625442b11d27ecf2f9b3db9847433b614316926d8ab2da1",
       "winning_answer": null
     },
     {
@@ -75,11 +84,12 @@
       },
       "generators_usable": 0,
       "generators_abstained": 0,
+      "generators_failed": 3,
       "judges_ok": 0,
       "cost_usd": 0.0,
-      "latency_ms": 1301,
-      "decision_id": "f14d8f86-8bc5-4103-a8fe-03e7ee69df93",
-      "audit_ref": "sha256:2f743cf58cb67c3d652c090823ca1fa661798ee96b1b3df6abb0e31982551091",
+      "latency_ms": 342,
+      "decision_id": "ae1b9916-09a8-47c7-8bf9-e6121212ae8e",
+      "audit_ref": "sha256:4111c108a4a1036ab1dac0b92360390b7e05d9f1adb18000caac532e0c222d27",
       "winning_answer": null
     },
     {
@@ -89,8 +99,8 @@
       "expected": "no_decision",
       "require_risk": null,
       "actual": "no_decision",
-      "match": true,
-      "mismatch_reason": "",
+      "match": false,
+      "mismatch_reason": "status ok, but only 0 generator(s) abstained (need 2). The council did not decline - something else went wrong.",
       "confidence": 0.0,
       "signals": {
         "inter_judge_agreement": null,
@@ -111,11 +121,12 @@
       },
       "generators_usable": 0,
       "generators_abstained": 0,
+      "generators_failed": 3,
       "judges_ok": 0,
       "cost_usd": 0.0,
-      "latency_ms": 302,
-      "decision_id": "f86b8515-b44d-4586-9461-eff2c526e784",
-      "audit_ref": "sha256:b03f3db496d91451f5f5e8024ed88752f2da00f7ae5264e4163af051fcce7e55",
+      "latency_ms": 324,
+      "decision_id": "efe3a56a-6cbf-4f85-9121-4618303650b6",
+      "audit_ref": "sha256:61a69d0bdbfe4006485971d4d7fa6472742f57c4be2ba0a0759765ea64b81752",
       "winning_answer": null
     },
     {
@@ -147,11 +158,12 @@
       },
       "generators_usable": 0,
       "generators_abstained": 0,
+      "generators_failed": 0,
       "judges_ok": 0,
       "cost_usd": 0.0,
       "latency_ms": 0,
-      "decision_id": "b5d9d5b0-324f-4065-98f5-ee31b80669dc",
-      "audit_ref": "sha256:5f477b9a7cc262010fb89ebb724863958cff067178605612fcc5dd82c62abef6",
+      "decision_id": "01535927-4fb9-49cf-9bfd-2f3c40cfbee3",
+      "audit_ref": "sha256:e2b540f7f0bb2448a62ad160c638371b61e759467be2961b00bc47e82da77b8b",
       "winning_answer": null
     },
     {
@@ -183,11 +195,12 @@
       },
       "generators_usable": 0,
       "generators_abstained": 0,
+      "generators_failed": 3,
       "judges_ok": 0,
       "cost_usd": 0.0,
-      "latency_ms": 308,
-      "decision_id": "e6b27d7b-d132-4d07-8773-78fbc7e6fed2",
-      "audit_ref": "sha256:f563e085598f05fb9ea6024631c6bef28bb3a319bd750b78849af691ce265b99",
+      "latency_ms": 316,
+      "decision_id": "b04f4da1-3c48-4039-84e6-17d1372369c4",
+      "audit_ref": "sha256:1592d82e9b1cdf40cea847edb33632112be20841f01143159e813f888c3b7ac3",
       "winning_answer": null
     }
   ]

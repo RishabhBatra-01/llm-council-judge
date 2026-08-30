@@ -149,13 +149,37 @@ def call_model(model_id, prompt, system_prompt=None, max_tokens=DEFAULT_MAX_TOKE
         if status == 200:
             return read_reply(response, elapsed_ms, attempt)
 
-        body = response.text[:120].replace("\n", " ")
+        body = response.text[:400].replace("\n", " ")
 
         if status in FATAL:
-            return failure("http", f"HTTP {status} (fatal): {body}",
+            return failure("http", f"HTTP {status} (fatal): {body[:120]}",
                            elapsed_ms, attempt)
 
-        detail = f"HTTP {status}: {body}"
+        # Not every 429 means the same thing, and the status code alone cannot
+        # tell them apart:
+        #
+        #   "temporarily rate-limited upstream"  -> the provider pool is busy.
+        #                                           Waiting 2s genuinely helps.
+        #   "free-models-per-day" / daily cap    -> the account's daily quota is
+        #                                           spent. No amount of backoff
+        #                                           helps until it resets, and
+        #                                           every retry is a wasted call
+        #                                           on a request that cannot
+        #                                           succeed.
+        #
+        # We only learn which by reading the body. Treating a daily cap as
+        # retryable turns one dead call into three and adds ~14s of pointless
+        # sleeping per model.
+        if status == 429 and ("free-models-per-day" in body
+                              or "free_tier_daily" in body
+                              or "per-day" in body):
+            reset = response.headers.get("X-RateLimit-Reset", "")
+            return failure("quota",
+                           f"daily free-tier quota exhausted (reset={reset}); "
+                           "not retrying - backoff cannot help",
+                           elapsed_ms, attempt)
+
+        detail = f"HTTP {status}: {body[:120]}"
 
         if status in RETRYABLE and attempt < MAX_ATTEMPTS:
             wait = retry_after_seconds(response) or backoff_seconds(attempt)

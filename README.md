@@ -551,11 +551,33 @@ policy is explicit about which failures are worth retrying:
 
 | Codes | Policy |
 |---|---|
-| `429, 500, 502, 503, 504` | Retry — exponential backoff 2s → 4s → 8s |
+| `429` **congestion** | Retry — exponential backoff 2s → 4s → 8s |
+| `429` **daily quota** | **Never retry** — see below |
+| `500, 502, 503, 504` | Retry with backoff |
 | `400, 401, 403, 404` | **Never retry** — fatal, switch to a backup |
 
 Retrying a 403 forever burns quota on something that can never succeed; not
 retrying a 429 throws away a model that was fine.
+
+**Not every 429 means the same thing, and the status code cannot tell them
+apart.** We only learn which by reading the body:
+
+```
+"is temporarily rate-limited upstream"     -> provider pool busy; waiting helps
+"Rate limit exceeded: free-models-per-day" -> account quota spent; nothing helps
+   limit_source: openrouter_free_tier_daily
+```
+
+Treating a daily cap as retryable turns one dead call into three and adds ~14
+seconds of pointless sleeping per model. We detect it from the body and return
+a distinct `quota` failure stage without retrying.
+
+**The real free-tier limit is 50 requests/day, not ~200.** The brief's figure
+assumes an account holding credits; without them OpenRouter caps free models at
+50/day (`X-RateLimit-Limit: 50`), resetting at midnight UTC. That is 10 full
+council runs per day, not 40 — which is why `samples/` and `--offline` replay
+exist, and why the entire aggregator and confidence formula were developed
+without spending a single call.
 
 `Retry-After` is honoured when present (capped at 30s) and beats our own guess.
 Observed live: `google/*` sent no header so our backoff used 2s then 4s, while
