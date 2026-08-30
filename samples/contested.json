@@ -1,0 +1,129 @@
+{
+  "question": "Is remote work better than office work?",
+  "created_at": "2026-08-30T10:18:26.140489+00:00",
+  "candidates": [
+    {
+      "model_id": "nvidia/nemotron-3-super-120b-a12b:free",
+      "family": "nvidia",
+      "ok": true,
+      "detail": "",
+      "failure_stage": null,
+      "latency_ms": 9260,
+      "attempts": 1,
+      "tokens": 1010,
+      "cost_usd": 0,
+      "served_by": "nvidia/nemotron-3-super-120b-a12b:free",
+      "answer": "Remote work is not universally “better” than office work; its advantages and drawbacks depend on the job, individual preferences, and organizational context.\n\n**Potential benefits of remote work**  \n- **Flexibility and reduced commute:** Employees often report higher satisfaction from eliminating travel time and gaining schedule control (Buffer 2023 State of Remote Work)【https://buffer.com/state-of-remote-work/2023】.  \n- **Broader talent pool:** Companies can hire geographically dispersed workers, which can improve diversity and access to specialized skills.  \n- **Productivity findings:** A controlled experiment with Ctrip call‑center workers found a 13 % performance increase for remote staff, attributed to quieter environments and fewer breaks (Bloom et al., 2015)【https://www.nber.org/papers/w21371】.\n\n**Challenges of remote work**  \n- **Communication and collaboration:** Spontaneous interactions that foster creativity and mentorship can suffer; some studies note slower idea generation in fully remote teams.  \n- **Work‑life boundaries:** Without a physical separation, employees may experience longer hours or difficulty disconnecting, leading to burnout (Owl Labs 2023)【https://www.owllabs.com/state-of-remote-work/2023】.  \n- **Onboarding and culture:** New hires may find it harder to absorb organizational norms and build relationships remotely.\n\n**Conclusion**  \nWhether remote work is preferable hinges on factors such as task nature (e.g., independent vs. highly collaborative), employee autonomy needs, and how well an organization structures communication, performance metrics, and support systems. Many firms adopt hybrid models to capture flexibility while preserving in‑person interaction benefits. Thus, there is no one‑size‑fits‑all answer; effectiveness varies by context.",
+      "abstained": false,
+      "label": "A"
+    },
+    {
+      "model_id": "inclusionai/ling-3.0-flash-fin:free",
+      "family": "inclusionai",
+      "ok": true,
+      "detail": "",
+      "failure_stage": null,
+      "latency_ms": 2309,
+      "attempts": 1,
+      "tokens": 429,
+      "cost_usd": 0,
+      "served_by": "inclusionai/ling-3.0-flash-fin:free",
+      "answer": "There is no universally \"better\" option — it depends on individual circumstances, job type, and organizational goals.\n\n**Remote work advantages:**\n- Greater flexibility and autonomy over one's schedule\n- Elimination of commute time and costs\n- Often higher self-reported productivity for focused, individual tasks\n- Access to a broader talent pool for employers\n\n**Office work advantages:**\n- Easier collaboration, brainstorming, and spontaneous interaction\n- Stronger team cohesion and company culture\n- Better for roles requiring physical presence (labs, manufacturing, healthcare)\n- Clearer boundaries between work and personal life for some people\n\nResearch, including a large Stanford study by Nicholas Bloom, has found remote workers can be more productive but may experience weaker career advancement and social isolation. A 2022 Buffer \"State of Remote Work\" report found 72% of remote workers struggle with unplugging after work.\n\nMany organizations now adopt hybrid models, attempting to capture benefits of both. The optimal arrangement varies by person, role, and company maturity.",
+      "abstained": false,
+      "label": "B"
+    },
+    {
+      "model_id": "dots-studio/dots-3-note-preview:free",
+      "family": "dots-studio",
+      "ok": true,
+      "detail": "",
+      "failure_stage": null,
+      "latency_ms": 18565,
+      "attempts": 1,
+      "tokens": 1881,
+      "cost_usd": 0,
+      "served_by": "dots-studio/dots-3-note-preview:free",
+      "answer": "It depends on the context and individual preferences. Remote work offers flexibility and eliminates commuting, which can improve work‑life balance, but it may lead to isolation and hinder spontaneous collaboration. Office work facilitates in‑person interaction and immediate feedback, but it can be less flexible and involve longer commutes. Many organizations adopt hybrid models to balance these factors. There is no universal answer; the best choice varies by job, team, and personal circumstances.",
+      "abstained": false,
+      "label": "C"
+    }
+  ],
+  "judgements": [
+    {
+      "model_id": "minimax/minimax-m3:free",
+      "family": "minimax",
+      "ok": true,
+      "detail": "",
+      "problems": [],
+      "parse_method": "direct",
+      "scores": {
+        "A": {
+          "accuracy": 4.0,
+          "calibration": 4.0,
+          "completeness": 5.0,
+          "reasoning": 5.0
+        },
+        "B": {
+          "accuracy": 5.0,
+          "calibration": 4.0,
+          "completeness": 5.0,
+          "reasoning": 5.0
+        },
+        "C": {
+          "accuracy": 5.0,
+          "calibration": 4.0,
+          "completeness": 4.0,
+          "reasoning": 4.0
+        }
+      },
+      "justification": {
+        "A": "Cites real studies with specific figures; links appear plausible. Comprehensive coverage of pros/cons, nuanced conclusion. Minor risk: cited URLs unverified, but claims match known research.",
+        "B": "Accurate claims referencing Bloom study and Buffer report. Balanced, well-structured, acknowledges trade-offs. Doesn't flag uncertainty about specific stats but stays within reasonable evidence.",
+        "C": "Accurate general statements; addresses both sides and hybrid trend. Shorter and less detailed than A/B, but logically sound. No unsupported claims."
+      },
+      "latency_ms": 5862,
+      "attempts": 1,
+      "tokens": 1470,
+      "cost_usd": 0.0,
+      "repair_calls": 0
+    },
+    {
+      "model_id": "cohere/north-mini-code:free",
+      "family": "cohere",
+      "ok": true,
+      "detail": "",
+      "problems": [],
+      "parse_method": "direct",
+      "scores": {
+        "A": {
+          "accuracy": 5.0,
+          "calibration": 5.0,
+          "completeness": 5.0,
+          "reasoning": 5.0
+        },
+        "B": {
+          "accuracy": 4.0,
+          "calibration": 4.0,
+          "completeness": 5.0,
+          "reasoning": 5.0
+        },
+        "C": {
+          "accuracy": 5.0,
+          "calibration": 5.0,
+          "completeness": 5.0,
+          "reasoning": 5.0
+        }
+      },
+      "justification": {
+        "A": "A provides well‑cited benefits/challenges and a balanced conclusion, matching evidence and covering all question aspects.",
+        "B": "B lists pros/cons and cites research, but the 72% figure slightly mismatches the reported 71%, lowering accuracy slightly.",
+        "C": "C offers a concise, hedged overview of both sides and hybrid solutions, fully addressing the question with no factual errors."
+      },
+      "latency_ms": 52061,
+      "attempts": 1,
+      "tokens": 5502,
+      "cost_usd": 0.0,
+      "repair_calls": 0
+    }
+  ]
+}

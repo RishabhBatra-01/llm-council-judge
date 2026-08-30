@@ -1,0 +1,129 @@
+{
+  "question": "What year was the Eiffel Tower completed, and who designed it?",
+  "created_at": "2026-08-30T10:16:49.957603+00:00",
+  "candidates": [
+    {
+      "model_id": "nvidia/nemotron-3-super-120b-a12b:free",
+      "family": "nvidia",
+      "ok": true,
+      "detail": "",
+      "failure_stage": null,
+      "latency_ms": 1663,
+      "attempts": 1,
+      "tokens": 336,
+      "cost_usd": 0,
+      "served_by": "nvidia/nemotron-3-super-120b-a12b:free",
+      "answer": "The Eiffel Tower was completed in 1889 and was designed by the French engineer Gustave Eiffel【https://en.wikipedia.org/wiki/Eiffel_Tower】.",
+      "abstained": false,
+      "label": "A"
+    },
+    {
+      "model_id": "inclusionai/ling-3.0-flash-fin:free",
+      "family": "inclusionai",
+      "ok": true,
+      "detail": "",
+      "failure_stage": null,
+      "latency_ms": 1388,
+      "attempts": 1,
+      "tokens": 269,
+      "cost_usd": 0,
+      "served_by": "inclusionai/ling-3.0-flash-fin:free",
+      "answer": "The Eiffel Tower was completed in 1889. It was designed by the engineering firm of Gustave Eiffel, with the structural design led by Maurice Koechlin and Émile Nouguier, and the architectural appearance refined by Stephen Sauvestre.",
+      "abstained": false,
+      "label": "B"
+    },
+    {
+      "model_id": "dots-studio/dots-3-note-preview:free",
+      "family": "dots-studio",
+      "ok": true,
+      "detail": "",
+      "failure_stage": null,
+      "latency_ms": 4636,
+      "attempts": 1,
+      "tokens": 503,
+      "cost_usd": 0,
+      "served_by": "dots-studio/dots-3-note-preview:free",
+      "answer": "The Eiffel Tower was completed in 1889 and was designed by Gustave Eiffel, with engineering contributions from Maurice Koechlin and Émile Nouguier.",
+      "abstained": false,
+      "label": "C"
+    }
+  ],
+  "judgements": [
+    {
+      "model_id": "minimax/minimax-m3:free",
+      "family": "minimax",
+      "ok": true,
+      "detail": "",
+      "problems": [],
+      "parse_method": "direct",
+      "scores": {
+        "A": {
+          "accuracy": 5.0,
+          "calibration": 4.0,
+          "completeness": 5.0,
+          "reasoning": 5.0
+        },
+        "B": {
+          "accuracy": 5.0,
+          "calibration": 5.0,
+          "completeness": 5.0,
+          "reasoning": 5.0
+        },
+        "C": {
+          "accuracy": 5.0,
+          "calibration": 4.0,
+          "completeness": 5.0,
+          "reasoning": 5.0
+        }
+      },
+      "justification": {
+        "A": "Correct year and designer. No fabricated sources; Wikipedia link is real. Simple but fully addresses the question.",
+        "B": "All facts correct. Most complete answer, attributing design contributions accurately. Well-calibrated and well-reasoned.",
+        "C": "Correct year, designer, and acknowledges engineering contributions. No issues with accuracy or completeness."
+      },
+      "latency_ms": 6440,
+      "attempts": 1,
+      "tokens": 841,
+      "cost_usd": 0.0,
+      "repair_calls": 0
+    },
+    {
+      "model_id": "cohere/north-mini-code:free",
+      "family": "cohere",
+      "ok": true,
+      "detail": "",
+      "problems": [],
+      "parse_method": "direct",
+      "scores": {
+        "A": {
+          "accuracy": 5.0,
+          "calibration": 5.0,
+          "completeness": 5.0,
+          "reasoning": 5.0
+        },
+        "B": {
+          "accuracy": 5.0,
+          "calibration": 5.0,
+          "completeness": 5.0,
+          "reasoning": 5.0
+        },
+        "C": {
+          "accuracy": 5.0,
+          "calibration": 5.0,
+          "completeness": 5.0,
+          "reasoning": 5.0
+        }
+      },
+      "justification": {
+        "A": "Provides correct year and designer, includes source, fully answers question.",
+        "B": "Correct year and designer, adds detail on contributors, fully addresses question.",
+        "C": "Correct year and designer, mentions engineering contributors, fully answers question."
+      },
+      "latency_ms": 9233,
+      "attempts": 1,
+      "tokens": 2082,
+      "cost_usd": 0.0,
+      "repair_calls": 0
+    }
+  ]
+}

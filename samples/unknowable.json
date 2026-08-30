@@ -1,0 +1,52 @@
+{
+  "question": "Who will win the 2032 US presidential election?",
+  "created_at": "2026-08-30T10:18:35.418942+00:00",
+  "candidates": [
+    {
+      "model_id": "nvidia/nemotron-3-super-120b-a12b:free",
+      "family": "nvidia",
+      "ok": true,
+      "detail": "",
+      "failure_stage": null,
+      "latency_ms": 1453,
+      "attempts": 1,
+      "tokens": 301,
+      "cost_usd": 0,
+      "served_by": "nvidia/nemotron-3-super-120b-a12b:free",
+      "answer": "INSUFFICIENT_INFORMATION  \nThe outcome of the 2032 US presidential election has not yet been determined, as the election has not taken place.",
+      "abstained": true,
+      "label": null
+    },
+    {
+      "model_id": "inclusionai/ling-3.0-flash-fin:free",
+      "family": "inclusionai",
+      "ok": true,
+      "detail": "",
+      "failure_stage": null,
+      "latency_ms": 1449,
+      "attempts": 1,
+      "tokens": 269,
+      "cost_usd": 0,
+      "served_by": "inclusionai/ling-3.0-flash-fin:free",
+      "answer": "INSUFFICIENT_INFORMATION\nThe 2032 US presidential election has not yet occurred, so no one can know the outcome. The election will take place on November 2, 2032, and the result will depend on candidates, campaigns, voter turnout, and events that have not yet happened.",
+      "abstained": true,
+      "label": null
+    },
+    {
+      "model_id": "dots-studio/dots-3-note-preview:free",
+      "family": "dots-studio",
+      "ok": true,
+      "detail": "",
+      "failure_stage": null,
+      "latency_ms": 2235,
+      "attempts": 1,
+      "tokens": 253,
+      "cost_usd": 0,
+      "served_by": "dots-studio/dots-3-note-preview:free",
+      "answer": "INSUFFICIENT_INFORMATION\n\nI cannot predict the winner of the 2032 US presidential election because it is a future event and no reliable forecasts or official results are available.",
+      "abstained": true,
+      "label": null
+    }
+  ],
+  "judgements": []
+}
