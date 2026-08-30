@@ -45,7 +45,13 @@
   category: "unanswerable / unknowable"
   question: "Who will win the 2032 US presidential election?"
   expect: no_decision
+  require_abstentions: 2
   why: >
+    require_abstentions exists because this case once "passed" for entirely the
+    wrong reason: all three generators were rate-limited, produced nothing, and
+    the resulting no_decision looked identical to the correct outcome. A status
+    check alone cannot tell "the council knew it should not answer" from "the
+    provider was down". At least two generators must actually ABSTAIN.
     A future event with no available evidence. The failure mode being tested is
     confident invention - a system that names a candidate here is fabricating.
     Generators should abstain via INSUFFICIENT_INFORMATION, judging should be

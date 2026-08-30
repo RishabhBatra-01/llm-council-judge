@@ -68,6 +68,18 @@ def check_expectation(case, decision):
             return False, (f"status ok, but no '{required}' risk was recorded "
                            f"(got {sorted(types) or 'none'})")
 
+    # Guards against passing for the wrong reason. A no_decision produced by
+    # three rate-limited generators looks identical to one produced by three
+    # generators correctly declining to guess - unless we check WHY.
+    needed = case.get("require_abstentions")
+    if needed:
+        abstained = sum(1 for g in decision["provenance"]["generators"]
+                        if g["abstained"])
+        if abstained < needed:
+            return False, (f"status ok, but only {abstained} generator(s) "
+                           f"abstained (need {needed}). The council did not "
+                           "decline - something else went wrong.")
+
     return True, ""
 
 
@@ -103,6 +115,8 @@ def summarise(case, decision):
             if g["ok"] and not g["abstained"]),
         "generators_abstained": sum(
             1 for g in decision["provenance"]["generators"] if g["abstained"]),
+        "generators_failed": sum(
+            1 for g in decision["provenance"]["generators"] if not g["ok"]),
         "judges_ok": sum(1 for j in decision["provenance"]["judges"] if j["ok"]),
         "cost_usd": decision["provenance"]["cost_usd"],
         "latency_ms": decision["provenance"]["total_latency_ms"],
@@ -153,9 +167,26 @@ def main():
 
     matched = sum(1 for row in rows if row["match"])
 
+    # A run where generators could not be reached measures the PROVIDER, not
+    # the council. Saying so on the report itself matters: a reader seeing
+    # "2/5" with no context would conclude the system is broken, when in fact
+    # every case still produced a well-formed Decision Object and declined
+    # rather than inventing an answer.
+    starved = [row["id"] for row in rows
+               if row["generators_failed"] and not row["generators_usable"]
+               and row["actual"] != "refused"]
+
     report = {
         "created_at": datetime.datetime.now(datetime.timezone.utc).isoformat(),
         "mode": "offline" if args.offline else "live",
+        "degraded": bool(starved),
+        "degraded_cases": starved,
+        "degraded_note": (
+            "Every generator call failed on these cases (free-tier rate limit). "
+            "Their results measure provider availability, not council logic. "
+            "Note the system still emitted a valid Decision Object for each and "
+            "declined rather than fabricating - but this report should not be "
+            "read as a measurement of the council." if starved else ""),
         "cases_run": len(rows),
         "cases_expected": len(cases),
         "matched_expectation": matched,
@@ -184,6 +215,11 @@ def main():
     print("=" * 70)
     print(f"  {matched}/{len(rows)} matched expectation | "
           f"${report['total_cost_usd']} | {report['total_latency_ms']} ms")
+    if starved:
+        print(f"  DEGRADED RUN - every generator call failed on: "
+              f"{', '.join(starved)}")
+        print("  These results measure provider availability, not the council. "
+              "Re-run when the rate limit clears.")
     print(f"  report -> {REPORT_PATH}")
 
     # Exit 0 either way. A mismatch is information, not a build failure - and

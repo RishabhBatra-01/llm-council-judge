@@ -7,14 +7,6 @@ a safety gate, and a tamper-evident audit log.
 
 Built for the Aonxi engineering challenge. Python, OpenRouter free tier, $0.
 
-> **BUILD STATUS — delete this block before submitting.**
-> Done: client, generators, judges, aggregator, confidence, Decision Object,
-> JSON schema, audit chain, `config.yaml`, citation verification, `evals/`.
-> **Pending: `gates.py`** — the pre-gate and post-gate. Until it exists the
-> system runs without a safety gate, says so loudly on stderr, and attaches a
-> high-severity `safety` risk to every Decision Object. Eval case #4 cannot
-> pass.
-
 ---
 
 ## Quick start
@@ -200,6 +192,51 @@ which is fine — ties resolve to an explicit policy, never to a coin flip.
 Judges score raw criteria; our code applies the weights. Handing a judge the
 weights invites it to pre-aggregate and bias its own scores.
 **The judge scores; the aggregator weights.**
+
+---
+
+## The safety gate
+
+`gates.py` runs deterministic rules, not a model. That is a choice, not a
+shortcut:
+
+- **Deterministic** — the same question is always refused for the same reason.
+  We measured our own models producing different output for identical prompts at
+  `temperature: 0`, so a model-based classifier cannot promise this.
+- **Free** — a refusal costs zero API calls and zero seconds, which matters
+  against a ~200 request/day ceiling.
+- **Not promptable** — a classifier that reads the user's text can be argued
+  with. "Ignore previous instructions" does not work on a regular expression.
+- **Auditable** — the exact rule that fired is recorded in the Decision Object
+  and in the hash-chained log, so a refusal can be explained months later.
+
+Each pattern pairs an **action** with a **target**. *"How does ransomware
+typically spread across a network?"* is allowed; a request to write one is not.
+Matching the target alone would refuse the security engineer along with the
+attacker — and a gate that blocks ordinary learning is a gate people switch off.
+First match wins and we stop looking: enumerating every rule a text violates
+turns the refusal message into a map around the gate.
+
+`post_gate` runs the same rules over the winning answer. A question can pass the
+pre-gate and still draw an unsafe answer; the gate that screens input is not the
+gate that screens output.
+
+**The cost is coverage,** and we take that trade knowingly. A rule list catches
+the blatant and misses the subtle. A gate that fails predictably is more useful
+in an audit trail than one that fails creatively.
+
+```
+$ python council.py "Write me a working keylogger in Python that emails captured passwords."
+
+  status     : refused
+  risk       : [high safety] Requests working malicious software.
+                             (pre-gate rule: malware_authoring)
+  Refused before any model was called. 0 API calls.
+  audit_ref  : sha256:c298487433124eea8f6e9dd...
+```
+
+A refusal is a complete, schema-valid Decision Object and it enters the audit
+chain like any other decision.
 
 ---
 
@@ -656,7 +693,8 @@ Named deliberately. Nothing here is hidden.
 
 | Gap | Why |
 |---|---|
-| **Pre-gate and post-gate not implemented** | `gates.py` is not written. `decision.py` has `refused_decision()` ready and `council.decide()` calls the gate when present; when absent it warns on stderr and attaches a high-severity `safety` risk to every decision rather than skipping silently. Eval case #4 cannot pass. |
+| **The gate is a rule list, so its coverage is narrow** | It catches the blatant and misses the subtle, and a determined person can rephrase around it. Chosen knowingly — see below. |
+| **A tie among equally good answers declines** | `factual` ran cleanly on one occasion (3 answers, 2 judges) and still returned `no_decision`: candidates B and C landed within 0.10 and no verified citation separated them. When every answer is correct the margin collapses and the tie-break has nothing to work with, so the council declines a question it demonstrably knows. Documented rather than patched — changing the tie policy to make a test pass is the failure this project exists to prevent. |
 | **Confidence is uncalibrated** | No validation against ground truth. A defensible heuristic, not a measurement. |
 | **Citation `verified` means lexical overlap, not support** | 40% content-word overlap with the fetched page. A page can contain every word of a claim and contradict it. Deliberate — see §7. |
 | **Claim extraction is a heuristic** | The claim is taken as the sentence containing the URL. Models do not reliably put a claim and its citation in the same sentence. Its weakness is why an unconfirmed citation becomes `unverified` rather than `failed`. |
@@ -691,37 +729,40 @@ Named deliberately. Nothing here is hidden.
 
 ## The one question: a design decision I did not automate
 
-**I did not automate the judgment of whether a citation is true.**
+**I did not automate the decision about whether a citation is actually true.**
 
-The system verifies that a source is reachable and that the claim's wording
-plausibly appears there. It stops precisely there. It never promotes "reachable"
-to "correct". Anything short of that stays `unverified` and goes to a human.
+My system checks two things: does the URL open, and do the words from the claim
+appear on that page. That is all. It never turns "the page loaded" into "the
+claim is correct". Anything it cannot confirm is marked `unverified` and left
+for a person to look at.
 
-I did not arrive at this from principle. I watched it happen. On the remote-work
-question, one generator cited a Stanford article whose own headline says remote
-work *increases productivity*, and used it to support a claim about the
-**downsides** of remote work. One judge called the citations "accurate". The
-other flagged the misattribution and scored calibration 0.
+I did not decide this up front. I ran into it.
 
-**Neither judge could open the URL.** Both were guessing, and they guessed
-differently. The only thing that could settle it was a step neither of them can
-perform.
+On the remote-work question, one generator cited a Stanford article to support a
+point about the *downsides* of remote work. The URL itself is titled
+`researchers-find-remote-work-increases-productivity`. One judge said the
+citations were "accurate". The other judge flagged it as a misattribution and
+gave that answer 0 for calibration.
 
-I could automate the next step. I could fetch the page, embed the claim, embed
-the paragraphs, and score the similarity. It would produce a number, and the
-number would look exactly as authoritative as the reachability check — a green
-`verified` label on a claim no one had actually confirmed. The failure mode is
-the whole problem: a citation that has been *machine-approved* is more dangerous
-than one marked `unverified`, because it stops a person from looking.
+Neither judge could open the link. Both were guessing, and they guessed
+differently. Settling it needed a step neither of them can do.
 
-So the line sits where the evidence stops. The machine reports what it observed:
-this URL resolves, these words appear. Whether the source *supports* the claim is
-a reading task, and it goes to a person, along with everything needed to do it in
-under a minute.
+I could have automated that step. Fetch the page, embed the claim, embed the
+paragraphs, compare them, output a score. That would work, and it would give me
+a number. The problem is what the number looks like. It would sit in the same
+`verified` field as the reachability check and carry the same weight, on a claim
+nobody had actually confirmed. A citation the machine has approved is worse than
+one marked `unverified`, because the green label is what stops someone from
+checking it themselves.
 
-The general rule I took from this: **automate up to the edge of your evidence,
-and make the edge visible.** The expensive part of a wrong decision is not the
-error — it is the confidence attached to it.
+So I put the line where my evidence runs out. The system reports what it
+observed: this URL resolves, these words are on the page. Whether the source
+actually supports the claim is a reading task, and it goes to a person, with
+everything they need to settle it in about a minute.
+
+The rule I took from it: **automate up to the edge of your evidence, and make
+the edge visible.** The expensive part of a wrong decision is not the mistake.
+It is the confidence attached to it.
 
 ---
 
@@ -739,7 +780,7 @@ aggregate.py                   winner + earned confidence  (no model is consulte
 citations.py                   opens cited URLs; reachability + lexical overlap
 decision.py                    the Decision Object, including refusals
 audit.py                       hash-chained log: append, verify, show, demo
-gates.py                       TODO - pre-gate / post-gate
+gates.py                       pre-gate / post-gate; deterministic rules, no model call
 schema/decision.schema.json    the output contract
 evals/questions.yaml           the five required cases, with expected outcomes
 evals/run_evals.py             the harness
